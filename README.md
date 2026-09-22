@@ -29,10 +29,10 @@ The complete setup is in [QUICKSTART.md](QUICKSTART.md). The short version is:
 4. Enter the local X-Plane folder in the installation panel and install the bundled situation and loader.
 5. Load and prepare the situation. Complete X-Plane's **Use Demo** and **Understood** screens if they appear.
 6. Confirm the dashboard shows a paused ready state.
-7. Set `OPENAI_API_KEY` in the environment that starts the dashboard, or use the documented macOS Keychain fallback.
+7. Add an OpenAI API key through the dashboard settings, set `OPENAI_API_KEY` in the server environment, or use the documented macOS Keychain fallback.
 8. Select a model and start an evaluation.
 
-The tested loader is for Apple Silicon macOS. Windows, Linux, and Intel Mac require corresponding native builds and testing before they can be claimed as supported.
+The tested automatic loader is for Apple Silicon macOS. On other platforms, the dashboard provides a manual workflow: load the bundled saved flight in X-Plane, then choose **Prepare current flight**. The agent and evaluation stack are designed to use the same local web API afterward. Windows, Linux, and Intel Mac still require clean-machine testing before they can be claimed as supported.
 
 ## Review without running X-Plane
 

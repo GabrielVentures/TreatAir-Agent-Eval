@@ -19,7 +19,7 @@ export function loadConfig(baseFile=DEFAULT_CONFIG_FILE,stateRoot=process.env.XP
  return {...base,simRoot:simRoot?path.resolve(simRoot):null};
 }
 
-export function inspectInstallation(simRoot,config){
+export function inspectInstallation(simRoot,config,{platform=process.platform,arch=process.arch}={}){
  const root=simRoot?path.resolve(simRoot):null;
  const aircraft=root&&path.join(root,config.aircraft);
  const navigationCandidates=root?[
@@ -37,7 +37,7 @@ export function inspectInstallation(simRoot,config){
  if(checks.root&&!checks.aircraft)errors.push(`Expected A330 is missing: ${config.aircraft}`);
  if(checks.root&&!checks.navigation)errors.push('X-Plane navigation data was not found');
  if(checks.root&&!checks.airportData)errors.push('Global Airports apt.dat was not found');
- return {configured:Boolean(root),valid:Object.values(checks).every(Boolean),simRoot:root,checks,errors,platform:process.platform,arch:process.arch,automaticLaunch:process.platform==='darwin'&&Boolean(root&&fs.existsSync(path.join(root,'X-Plane.app')))};
+ return {configured:Boolean(root),valid:Object.values(checks).every(Boolean),simRoot:root,checks,errors,platform,arch,automaticLaunch:platform==='darwin'&&Boolean(root&&fs.existsSync(path.join(root,'X-Plane.app')))};
 }
 
 function copyBundledFile(source,destination){
@@ -56,7 +56,7 @@ function bundledStatus(source,destination){
 }
 
 export function installBundledAssets(simRoot,config,{platform=process.platform,arch=process.arch}={}){
- const inspection=inspectInstallation(simRoot,config);
+ const inspection=inspectInstallation(simRoot,config,{platform,arch});
  if(!inspection.valid)return {...inspection,assets:null};
  const situationSource=path.join(HERE,'assets','situations',BUNDLED_SITUATION_NAME);
  const situationDestination=path.join(inspection.simRoot,config.situation);
@@ -80,11 +80,14 @@ export function configureInstallation(simRoot,config,{stateRoot=process.env.XPLA
  return {...result,localConfig:localFile};
 }
 
-export function installationSummary(config){
- const result=inspectInstallation(config.simRoot,config);
- if(!result.valid)return result;
+export function installationSummary(config,{platform=process.platform,arch=process.arch}={}){
+ const result=inspectInstallation(config.simRoot,config,{platform,arch});
+ if(!result.valid)return {...result,ready:false,manualLoadAvailable:false,automaticLoadAvailable:false};
  const situationSource=path.join(HERE,'assets','situations',BUNDLED_SITUATION_NAME),situation=path.join(result.simRoot,config.situation);
  const loaderSource=path.join(HERE,'assets','agentakt_scenario','mac_x64','agentakt_scenario.xpl'),loader=path.join(result.simRoot,path.dirname(config.aircraft),'plugins','agentakt_scenario','mac_x64','agentakt_scenario.xpl');
- const assets={situation:bundledStatus(situationSource,situation),loader:process.platform==='darwin'&&process.arch==='arm64'?bundledStatus(loaderSource,loader):{status:'unsupported',path:null}};
- return {...result,ready:assets.situation.status==='present'&&(config.nativeFlightInit||assets.loader.status==='present'),assets};
+ const assets={situation:bundledStatus(situationSource,situation),loader:platform==='darwin'&&arch==='arm64'?bundledStatus(loaderSource,loader):{status:'unsupported',path:null,reason:'Automatic situation loading is not bundled for this platform.'}};
+ const situationReady=assets.situation.status==='present';
+ const manualLoadAvailable=result.valid&&situationReady;
+ const automaticLoadAvailable=manualLoadAvailable&&(config.nativeFlightInit||assets.loader.status==='present');
+ return {...result,ready:manualLoadAvailable,manualLoadAvailable,automaticLoadAvailable,situationName:BUNDLED_SITUATION_NAME,situationRelativePath:config.situation,assets};
 }

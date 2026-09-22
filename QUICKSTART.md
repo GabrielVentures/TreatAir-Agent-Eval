@@ -32,7 +32,16 @@ The path is stored only in `.state/local-config.json`, which is ignored by Git. 
 
 ## Prepare a run
 
-Use **Load & prepare** in the dashboard. On supported Macs the harness can launch X-Plane. On other systems, start X-Plane manually and wait for its API to become available. If the demo screens appear, click **Use Demo** and then **Understood**. Setup waits for usable controls, pauses the simulator, loads the bundled situation, reapplies pause after initialization, and verifies the handoff.
+On Apple Silicon macOS, use **Load & prepare** in the dashboard. The harness launches X-Plane, waits through any demo screens, loads the bundled situation, configures the aircraft, reapplies pause after initialization, and verifies the handoff. If the demo screens appear, click **Use Demo** and then **Understood**.
+
+On Windows, Linux, or another system without the bundled native loader, use the manual path shown in the dashboard:
+
+1. Start X-Plane and complete any demo prompts.
+2. Load **Runway Change Airbus A330-300 Situation** through X-Plane's saved-flight interface.
+3. Wait until the A330 cockpit and scenery are visible.
+4. Return to Flight Control Room and choose **Prepare current flight**.
+
+The manual path uses the same setup verification, action layer, agent loop, recorder, and evaluator. It bypasses only automatic saved-flight loading. It has not yet been validated on Windows or Linux, so those platforms are compatibility targets rather than claimed supported configurations.
 
 The command-line equivalent is:
 
@@ -45,7 +54,9 @@ The final status must report `"ready": true` and `"paused": 1` before an evaluat
 
 ## Run an agent
 
-For the direct API backend:
+For the direct API backend, open the settings button in the upper-right corner and add an OpenAI API key for the current dashboard session. The key remains in server memory and is not written to disk or returned to the browser.
+
+For command-line use, set the environment variable instead:
 
 ```sh
 export OPENAI_API_KEY="..."

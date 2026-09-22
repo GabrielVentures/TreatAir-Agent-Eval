@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {configureInstallation,installBundledAssets,loadConfig} from './installation.mjs';
+import {configureInstallation,installBundledAssets,installationSummary,loadConfig} from './installation.mjs';
 
 function fixture(){
  const workspace=fs.mkdtempSync(path.join(os.tmpdir(),'xplane-install-')),root=path.join(workspace,'X-Plane 12'),stateRoot=path.join(workspace,'state');
@@ -40,5 +40,29 @@ test('unsupported platforms keep setup explicit and do not claim a loader',()=>{
  try{
   const result=installBundledAssets(f.root,config,{platform:'win32',arch:'x64'});
   assert.equal(result.valid,true);assert.equal(result.assets.situation.status,'installed');assert.equal(result.assets.loader.status,'unsupported');
+ }finally{fs.rmSync(f.workspace,{recursive:true,force:true});}
+});
+
+test('unsupported platforms expose manual preparation without claiming automatic loading',()=>{
+ const f=fixture(),config=loadConfig(),stateRoot=f.stateRoot;
+ try{
+  configureInstallation(f.root,config,{stateRoot,platform:'win32',arch:'x64'});
+  const configured=loadConfig(undefined,stateRoot),summary=installationSummary(configured,{platform:'win32',arch:'x64'});
+  assert.equal(summary.ready,true);
+  assert.equal(summary.manualLoadAvailable,true);
+  assert.equal(summary.automaticLoadAvailable,false);
+  assert.equal(summary.assets.situation.status,'present');
+  assert.equal(summary.assets.loader.status,'unsupported');
+ }finally{fs.rmSync(f.workspace,{recursive:true,force:true});}
+});
+
+test('Apple Silicon installation exposes automatic and manual preparation',()=>{
+ const f=fixture(),config=loadConfig(),stateRoot=f.stateRoot;
+ try{
+  configureInstallation(f.root,config,{stateRoot,platform:'darwin',arch:'arm64'});
+  const configured=loadConfig(undefined,stateRoot),summary=installationSummary(configured,{platform:'darwin',arch:'arm64'});
+  assert.equal(summary.ready,true);
+  assert.equal(summary.manualLoadAvailable,true);
+  assert.equal(summary.automaticLoadAvailable,true);
  }finally{fs.rmSync(f.workspace,{recursive:true,force:true});}
 });

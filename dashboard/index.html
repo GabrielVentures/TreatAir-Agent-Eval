@@ -10,8 +10,23 @@
     <main class="shell">
       <header class="masthead">
         <div class="brand"><span class="brand-mark">◆</span><span>Flight Control Room</span><small>agent evaluation / X-Plane</small></div>
-        <div class="system-strip" id="system-strip"><span class="pulse"></span><span>Connecting to local recorder</span></div>
+        <div class="mast-actions">
+          <div class="system-strip" id="system-strip"><span class="pulse"></span><span>Connecting to local recorder</span></div>
+          <button class="icon-button" id="open-settings" type="button" aria-label="Open settings" title="Settings">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.25A3.75 3.75 0 1 0 12 15.75 3.75 3.75 0 0 0 12 8.25ZM19.3 13.5c.07-.49.07-1.01 0-1.5l1.75-1.36-1.75-3.03-2.06.84a8.1 8.1 0 0 0-1.3-.75l-.31-2.2h-3.5l-.31 2.2c-.46.2-.9.45-1.3.75l-2.06-.84-1.75 3.03L8.46 12a7.6 7.6 0 0 0 0 1.5l-1.75 1.36 1.75 3.03 2.06-.84c.4.3.84.55 1.3.75l.31 2.2h3.5l.31-2.2c.46-.2.9-.45 1.3-.75l2.06.84 1.75-3.03L19.3 13.5Z"/></svg>
+          </button>
+        </div>
       </header>
+
+      <dialog class="settings-dialog" id="settings-dialog" aria-labelledby="settings-title">
+        <form id="settings-form">
+          <div class="settings-heading"><div><h2 id="settings-title">Settings</h2><p>Configure provider access for this dashboard session.</p></div><button class="icon-button" id="close-settings" type="button" aria-label="Close settings" title="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.7 6.7 10.6 10.6m0-10.6L6.7 17.3"/></svg></button></div>
+          <label class="credential-field">OpenAI API key<input id="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…"></label>
+          <p class="credential-status" id="credential-status">Checking credential status.</p>
+          <p class="settings-help">The key remains in the local dashboard process only. It is not returned to this browser, written to disk, or included in flight records.</p>
+          <div class="settings-actions"><button class="quiet danger" id="clear-api-key" type="button">Clear session key</button><button class="secondary" type="submit">Save for this session</button></div>
+        </form>
+      </dialog>
 
       <nav class="steps" aria-label="Evaluation stages">
         <button type="button" data-stage="setup" aria-current="step"><span>1</span>Prepare aircraft</button>
@@ -30,11 +45,12 @@
           <p id="installation-detail">The project checks the A330 and navigation data, then installs its situation and loader without overwriting existing files.</p>
         </details>
         <div class="setup-controls">
+          <div class="loading-mode" id="loading-mode" role="note" aria-live="polite"></div>
           <label class="situation-field">Situation<select id="situation"></select></label>
           <p id="situation-name" class="field-help"></p>
           <div class="setup-actions">
           <button class="secondary load-action" id="load-situation">Load &amp; prepare</button>
-          <button class="quiet prepare-action" id="prepare-loaded">Use current flight</button>
+          <button class="quiet prepare-action" id="prepare-loaded">Prepare current flight</button>
           </div>
         </div>
       </section>

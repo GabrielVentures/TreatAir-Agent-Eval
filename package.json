@@ -9,7 +9,7 @@
   },
   "scripts": {
     "test": "node --test *.test.mjs",
-    "check": "node --check scenario.mjs && node --check flight-agent.mjs && node --check dashboard.mjs",
+    "check": "node --check scenario.mjs && node --check flight-agent.mjs && node --check dashboard.mjs && node --check dashboard/app.js",
     "dashboard": "node dashboard.mjs"
   }
 }

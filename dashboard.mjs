@@ -28,6 +28,8 @@ const models=[
 const contextDir=path.join(ROOT,'dashboard-context');
 const contextCatalogFile=path.join(contextDir,'catalog.json');
 const operatorFile=path.join(ROOT,'operator.json');
+const inheritedApiKey=String(process.env.OPENAI_API_KEY||'').trim();
+let dashboardApiKey='';
 fs.mkdirSync(contextDir,{recursive:true,mode:0o700});
 
 const readJson=file=>fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):null;
@@ -59,6 +61,16 @@ function requireLocalControl(req){
 function evaluationBusy(){const snapshot=stateSnapshot();return snapshot.operator.phase==='EVALUATING'||['starting','running'].includes(snapshot.runner?.status)||snapshot.job?.status==='running';}
 function safeName(name){const out=String(name||'context').replace(/[^a-zA-Z0-9._-]/g,'_').replace(/^\.+/,'');if(!out)return 'context.txt';return out;}
 function updateOperator(patch){writeJson(operatorFile,{...(readJson(operatorFile)||{}),...patch});}
+function keychainApiKeyAvailable(){
+ if(process.platform!=='darwin')return false;
+ try{execFileSync('security',['find-generic-password','-a',process.env.USER||'', '-s','agentakt-openai-api-key'],{stdio:'ignore',timeout:5000});return true;}catch{return false;}
+}
+function credentialSummary(){
+ if(dashboardApiKey)return {configured:true,source:'dashboard session',sessionKey:true};
+ if(inheritedApiKey)return {configured:true,source:'server environment',sessionKey:false};
+ if(keychainApiKeyAvailable())return {configured:true,source:'macOS Keychain',sessionKey:false};
+ return {configured:false,source:null,sessionKey:false};
+}
 function launchXPlane(situation){
  if(!CFG.simRoot)return {launched:false,reason:'Configure the X-Plane installation folder first.'};
  if(process.platform!=='darwin')return {launched:false,reason:'Start X-Plane manually, then keep this setup request open.'};
@@ -122,7 +134,7 @@ function runConfig(input){
  return {backend:'api',model:model.id,reasoning:input.reasoning,maxDecisions,guidanceFile,contextManifestFile,contextNames:sources.map(x=>x.name)};
 }
 async function api(req,res,url){
- if(req.method==='GET'&&url.pathname==='/api/catalog')return send(res,200,{models,situations:listSituations(),recommendedSituation:CFG.simRoot?path.join(CFG.simRoot,CFG.situation):null,contexts:listContext(),defaultPrompt:defaultGuidance(),installation:installationSummary(CFG),csrfToken});
+ if(req.method==='GET'&&url.pathname==='/api/catalog')return send(res,200,{models,situations:listSituations(),recommendedSituation:CFG.simRoot?path.join(CFG.simRoot,CFG.situation):null,contexts:listContext(),defaultPrompt:defaultGuidance(),installation:installationSummary(CFG),credentials:credentialSummary(),csrfToken});
  if(req.method==='GET'&&url.pathname==='/api/snapshot')return send(res,200,stateSnapshot());
  if(req.method==='GET'&&url.pathname==='/api/readiness')return send(res,200,liveReadiness());
  if(req.method==='GET'&&url.pathname==='/api/report'){
@@ -146,6 +158,14 @@ async function api(req,res,url){
   CFG=loadConfig(path.join(HERE,'config.json'),ROOT);
   return send(res,200,{configured:true,installation:installationSummary(CFG),installed:result.assets});
  }
+ if(req.method==='POST'&&url.pathname==='/api/credentials'){
+  requireLocalControl(req);if(evaluationBusy())throw Error('Stop the active setup or evaluation before changing provider credentials.');
+  const input=await body(req);
+  if(input.clear===true){dashboardApiKey='';return send(res,200,{credentials:credentialSummary()});}
+  const key=String(input.apiKey||'').trim();
+  if(key.length<20||key.length>500||/\s/.test(key))throw Error('Enter a valid API key without spaces.');
+  dashboardApiKey=key;return send(res,200,{credentials:credentialSummary()});
+ }
  if(req.method==='GET'&&url.pathname==='/api/context-file'){
   const source=listContext().find(item=>item.id===url.searchParams.get('id'));if(!source)return send(res,404,{error:'Context source not found'});
   const entry=allContextSources().find(item=>item.id===source.id),extension=path.extname(entry.viewPath).toLowerCase();const type=extension==='.pdf'?'application/pdf':extension==='.json'?'application/json; charset=utf-8':'text/plain; charset=utf-8';
@@ -153,18 +173,23 @@ async function api(req,res,url){
  }
  if(req.method==='POST'&&url.pathname==='/api/setup'){
   requireLocalControl(req);if(evaluationBusy())throw Error('Cannot load a situation while setup or an evaluation is active.');
-  const installation=installationSummary(CFG);if(!installation.ready)throw Error(`Complete X-Plane setup first: situation ${installation.assets?.situation?.status||'missing'}, loader ${installation.assets?.loader?.status||'missing'}`);
+  const installation=installationSummary(CFG);if(!installation.automaticLoadAvailable)throw Error(`Automatic situation loading is unavailable: situation ${installation.assets?.situation?.status||'missing'}, loader ${installation.assets?.loader?.status||'missing'}. Load the saved flight in X-Plane, then choose Use current flight.`);
   const input=await body(req);const situations=listSituations(),found=situations.find(x=>x.path===input.situation);if(!found)throw Error('Select a situation from the catalog.');
   const launch=launchXPlane(found.path);
   return send(res,202,{accepted:true,launch,job:startJob('setup',['scenario.mjs','setup','--sit',found.path,'--watch-xplane-process'])});
  }
- if(req.method==='POST'&&url.pathname==='/api/prepare-loaded'){requireLocalControl(req);if(evaluationBusy())throw Error('Cannot prepare a situation while setup or an evaluation is active.');return send(res,202,{accepted:true,job:startJob('prepare-loaded',['scenario.mjs','setup','--reuse-loaded','--watch-xplane-process'])});}
+ if(req.method==='POST'&&url.pathname==='/api/prepare-loaded'){
+  requireLocalControl(req);if(evaluationBusy())throw Error('Cannot prepare a situation while setup or an evaluation is active.');
+  const installation=installationSummary(CFG);if(!installation.manualLoadAvailable)throw Error('Configure a valid X-Plane installation and install the bundled situation first.');
+  return send(res,202,{accepted:true,job:startJob('prepare-loaded',['scenario.mjs','setup','--reuse-loaded','--watch-xplane-process'])});
+ }
  if(req.method==='POST'&&url.pathname==='/api/run'){
   requireLocalControl(req);
   const prior=readJson(path.join(ROOT,'dashboard-runner.json'));if(['starting','running'].includes(prior?.status))throw Error('An evaluation is already running. Stop it or wait for it to finish.');
   const readiness=liveReadiness(true);if(!readiness.ready||!readiness.paused)throw Error(`Evaluation is locked: ${readiness.checks.join('; ')||readiness.message}`);
+  if(!credentialSummary().configured)throw Error('Add an OpenAI API key in Settings before starting an evaluation.');
   const config=runConfig(await body(req)),file=path.join(ROOT,'dashboard-run-config.json');writeJson(file,config);
-  const child=spawn(process.execPath,['dashboard-runner.mjs',file],{cwd:HERE,detached:true,stdio:'ignore'});child.unref();return send(res,202,{accepted:true,pid:child.pid,model:config.model,reasoning:config.reasoning});
+  const child=spawn(process.execPath,['dashboard-runner.mjs',file],{cwd:HERE,detached:true,stdio:'ignore',env:{...process.env,...(dashboardApiKey?{OPENAI_API_KEY:dashboardApiKey}:{})}});child.unref();return send(res,202,{accepted:true,pid:child.pid,model:config.model,reasoning:config.reasoning});
  }
  if(req.method==='POST'&&url.pathname==='/api/stop'){
   requireLocalControl(req);
