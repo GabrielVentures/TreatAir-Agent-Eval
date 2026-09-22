@@ -1,7 +1,7 @@
 {
   "simRoot": null,
   "api": "http://localhost:8086/api/v3",
-  "situation": "Output/situations/Agentakt Runway Change Airbus A330-300 Situation.sit",
+  "situation": "Output/situations/Runway Change Airbus A330-300 Situation.sit",
   "aircraft": "Aircraft/Laminar Research/Airbus A330-300/A330.acf",
   "airport": "KPDX",
   "runway": "28R",
