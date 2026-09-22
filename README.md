@@ -1,4 +1,4 @@
-# Flight Agent Evaluation Harness
+# Treat Air Flight Agent Evaluation Harness
 
 An experimental deployment and evaluation system for tool-using AI agents. It connects a language model to X-Plane through a restricted cockpit action layer, introduces a controlled change during an approach, records the resulting trajectory, and scores whether the agent completes the task safely.
 
