@@ -1,0 +1,15 @@
+{
+  "name": "flight-agent-eval",
+  "version": "0.1.0",
+  "private": false,
+  "description": "A local evaluation harness for tool-using AI agents operating an aircraft simulator.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test *.test.mjs",
+    "check": "node --check scenario.mjs && node --check flight-agent.mjs && node --check dashboard.mjs",
+    "dashboard": "node dashboard.mjs"
+  }
+}

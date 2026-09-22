@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Flight Control Room</title>
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="masthead">
+        <div class="brand"><span class="brand-mark">◆</span><span>Flight Control Room</span><small>agent evaluation / X-Plane</small></div>
+        <div class="system-strip" id="system-strip"><span class="pulse"></span><span>Connecting to local recorder</span></div>
+      </header>
+
+      <nav class="steps" aria-label="Evaluation stages">
+        <button type="button" data-stage="setup" aria-current="step"><span>1</span>Prepare aircraft</button>
+        <button type="button" data-stage="configure"><span>2</span>Configure agent</button>
+        <button type="button" data-stage="flight"><span>3</span>Follow flight</button>
+        <button type="button" data-stage="results"><span>4</span>Review results</button>
+      </nav>
+      <div class="workflow-heading"><div><h1 id="stage-title" tabindex="-1">Prepare the aircraft</h1><p id="stage-description">Load a situation and get X-Plane ready for the agent.</p></div><button class="quiet danger" id="stop-run">Stop &amp; pause</button></div>
+      <section class="control-bay" id="setup-view" data-view="setup" aria-label="Prepare aircraft">
+        <details class="installation" id="installation-panel">
+          <summary><span>X-Plane installation</span><strong id="installation-state">Checking</strong></summary>
+          <div class="installation-form">
+            <label>Installation folder<input id="sim-root" type="text" autocomplete="off" placeholder="/path/to/X-Plane 12"></label>
+            <button class="secondary" id="save-installation" type="button">Validate &amp; install project files</button>
+          </div>
+          <p id="installation-detail">The project checks the A330 and navigation data, then installs its situation and loader without overwriting existing files.</p>
+        </details>
+        <div class="setup-controls">
+          <label class="situation-field">Situation<select id="situation"></select></label>
+          <p id="situation-name" class="field-help"></p>
+          <div class="setup-actions">
+          <button class="secondary load-action" id="load-situation">Load &amp; prepare</button>
+          <button class="quiet prepare-action" id="prepare-loaded">Use current flight</button>
+          </div>
+        </div>
+      </section>
+      <section class="control-bay preparation-view" data-view="preparing" hidden aria-label="Aircraft preparation progress">
+        <div class="preparation-state">
+          <span class="preparation-spinner" aria-hidden="true"></span>
+          <div class="setup-status" id="setup-status" role="status" aria-live="polite">
+            <span class="setup-marker" id="setup-marker"></span>
+            <div><strong id="setup-stage">Preparing aircraft</strong><span id="setup-detail">Waiting for X-Plane.</span></div>
+          </div>
+          <p class="demo-note" id="startup-note">Using the X-Plane demo? When X-Plane opens, click <strong>Use Demo</strong>, then <strong>Understood</strong>. Preparation will pause the flight as soon as its controls become available.</p>
+          <button class="quiet" id="back-to-setup" type="button" hidden>Back to aircraft setup</button>
+        </div>
+      </section>
+      <section class="control-bay" id="configure-view" data-view="configure" hidden aria-label="Configure agent">
+        <div class="mission-controls">
+          <label class="model-field">Decision model<select id="model"></select></label>
+          <label>Reasoning<select id="reasoning"></select></label>
+          <label>Decision limit<input id="max-decisions" type="number" min="1" step="1" value="80"></label>
+          <div class="price-note" id="price-note">Direct API price estimate appears here.</div>
+        </div>
+        <details class="prompt-editor">
+          <summary>Agent operating prompt <button class="quiet tiny" id="restore-prompt" type="button">Restore default</button></summary>
+          <textarea id="prompt" spellcheck="false"></textarea>
+        </details>
+        <section class="context-picker" aria-label="Reference context">
+          <div><h2>Reference context</h2><p>Only sources selected here are passed to the agent.</p></div>
+          <div class="context-actions"><div id="contexts" class="checks"></div><label class="upload">Add a local text, Markdown, JSON, or PDF source<input id="context-upload" type="file" accept=".txt,.md,.json,.pdf" multiple></label></div>
+        </section>
+        <div class="stage-footer"><span id="run-readiness">Prepare the aircraft before starting.</span><button class="run-button" id="start-run" disabled>Start flight</button></div>
+      </section>
+
+      <section class="grid" data-view="flight results" hidden>
+        <article class="panel agent-panel" data-view="flight" hidden>
+          <div class="panel-title"><span class="index">A</span><div><h2>What it decided <small>agent trace</small></h2></div><span class="count" id="decision-count">0</span></div>
+          <div class="decision-list" id="decisions"><div class="empty-copy">Decisions will appear here with their verified outcomes.</div></div>
+        </article>
+
+        <article class="panel observation-panel" data-view="flight" hidden>
+          <div class="panel-title"><span class="index">B</span><div><h2>What it saw <small>observed flight</small></h2></div><span class="live-dot" id="live-dot"></span></div>
+          <div class="instrument-grid" id="instruments"></div>
+          <details class="raw-observation"><summary>Compressed observation payload</summary><pre id="observation-json">No telemetry received.</pre></details>
+        </article>
+
+        <article class="panel message-panel" data-view="flight" hidden>
+          <div class="panel-title"><span class="index">C</span><div><h2>Messages to the agent <small>communications</small></h2></div><span class="count" id="message-count">0</span></div>
+          <div id="message-alert"></div><div class="message-list" id="messages"><div class="empty-copy">Incoming ATC and scenario messages will appear here.</div></div>
+        </article>
+
+        <article class="panel results-panel" data-view="flight results" hidden>
+          <div class="panel-title"><span class="index">D</span><div><h2>Objective evidence <small>mission result</small></h2></div><button class="quiet tiny" id="refresh-report">Refresh report</button></div>
+          <div class="result-summary" id="result-summary" role="status"></div>
+          <div class="result-grid" id="results"><div class="empty-copy">Start, landing, fuel, and footprint scores will accumulate during the mission and resolve at the end.</div></div>
+          <details class="result-details"><summary>Full run result</summary><pre id="result-json">No final result yet.</pre></details>
+        </article>
+      </section>
+      <div class="stage-footer" data-view="results" hidden><button class="quiet" id="review-flight">Review flight activity</button><button class="run-button" id="new-mission">Prepare another flight</button></div>
+    </main>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

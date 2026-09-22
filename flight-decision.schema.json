@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["assessment", "actions", "waitSeconds", "done"],
+  "properties": {
+    "assessment": {"type": "string", "maxLength": 800},
+    "actions": {
+      "type": "array",
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["action", "value"],
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "landing_support_arm", "landing_support_disarm", "autobrake_mode",
+              "heading", "altitude", "speed", "vertical_speed", "level_change", "level_off",
+              "flaps", "gear", "nav1", "nav2", "nav_course", "tune_ils", "com1",
+              "approach", "localizer", "autopilot1", "autopilot2", "autothrust",
+              "acknowledge_message", "atc_window", "throttle_idle", "reverse_toggle",
+              "wheel_brakes", "speedbrakes_arm", "speedbrakes_retract", "speedbrakes_deploy", "autobrake"
+            ]
+          },
+          "value": {"type": ["number", "string", "null"]}
+        }
+      }
+    },
+    "waitSeconds": {"type": "integer", "minimum": 0, "maximum": 15},
+    "done": {"type": "boolean"}
+  }
+}

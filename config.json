@@ -1,0 +1,39 @@
+{
+  "simRoot": null,
+  "api": "http://localhost:8086/api/v3",
+  "situation": "Output/situations/Agentakt Runway Change Airbus A330-300 Situation.sit",
+  "aircraft": "Aircraft/Laminar Research/Airbus A330-300/A330.acf",
+  "airport": "KPDX",
+  "runway": "28R",
+  "pocMode": true,
+  "preserveSituationState": true,
+  "nativeFlightInit": false,
+  "distanceNm": 11.5,
+  "speedKts": 200,
+  "flapsRatio": 0.25,
+  "gearDown": false,
+  "glideslopeMarginFt": 650,
+  "stabilizeSimSeconds": 10,
+  "stabilizeWallTimeoutSeconds": 90,
+  "maxSpeedErrorKts": 12,
+  "maxVerticalSpeedFpm": 600,
+  "maxBankDeg": 12,
+  "maxPitchDeg": 12,
+  "maxAccelerationKtsPerSecond": 2,
+  "maxEvalSimSeconds": 1200,
+  "maxEvalWallSeconds": 2400,
+  "sampleIntervalMs": 200,
+  "agentPort": 8087,
+  "atc": {"windowId": null, "roi": null, "minimumConfidence": 0.85, "intervalMs": 1500},
+  "event": {
+    "aircraft": "Aircraft/Laminar Research/Boeing 737-800/b738.acf",
+    "automatic": false,
+    "afterSimSeconds": null,
+    "withinRunwayNm": null,
+    "armLeadSimSeconds": 10
+  },
+  "scenario": {
+    "alternateRunway": "28L",
+    "runwayChangeAfterSimSeconds": 20
+  }
+}

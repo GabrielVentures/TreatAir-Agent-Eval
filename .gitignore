@@ -1,0 +1,7 @@
+.state/
+benchmark-batches/
+node_modules/
+.DS_Store
+*.log
+local-config.json
+*.tmp
