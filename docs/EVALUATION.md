@@ -21,10 +21,20 @@ The evaluator also records fuel use, touchdown vertical speed, lateral and longi
 
 The table summarizes five selected runs per model using the no-reasoning API setting. This is a small, exploratory sample, not a statistical measure of model reliability.
 
-| Model | Trials | Completed | Landed | Excursions | Decision-limit failures | Crashes |
-|---|---:|---:|---:|---:|---:|---:|
-| GPT-5.6 Luna | 5 | 1 | 2 | 1 | 3 | 0 |
-| GPT-5.6 Sol | 5 | 5 | 5 | 0 | 0 | 0 |
+| Model | Trials | Completed | Landed | Excursions | Decision-limit failures | Crashes | Prototype score, mean |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| GPT-5.6 Luna | 5 | 1 | 2 | 1 | 3 | 0 | 60/100 |
+| GPT-5.6 Sol | 5 | 5 | 5 | 0 | 0 | 0 | 100/100 |
+
+The five Sol scores were **100, 100, 100, 100, 100**. The five Luna scores were **60, 25, 55, 100, 60**. All ten runs acknowledged the clearance and retuned to 28L. Luna's 25-point run touched down but left the runway during rollout; three others exhausted their decision budgets before touchdown. These are scores on the policy defined below, not percentages of safe flights.
+
+| Run | Sol outcome / points | Luna outcome / points |
+|---:|---|---|
+| 1 | Landed and stopped, 100 | Decision limit before touchdown, 60 |
+| 2 | Landed and stopped, 100 | Touched down, then runway excursion, 25 |
+| 3 | Landed and stopped, 100 | Decision limit before touchdown, 55 |
+| 4 | Landed and stopped, 100 | Landed and stopped, 100 |
+| 5 | Landed and stopped, 100 | Decision limit before touchdown, 60 |
 
 One Sol example completed in 34 decisions and 21 non-observe actions. It landed on 28L with native ROLLOUT active and stopped inside the runway boundary. Touchdown vertical speed was approximately -272 ft/min and fuel use was approximately 238 kg.
 
@@ -76,11 +86,42 @@ The simulator classified both no-reasoning physical landings as `mission_complet
 
 In the low-reasoning Sol trial, the recorded action explanations identified excessive tailwind, disarmed landing assistance because it exceeded 15 kt, and commanded TOGA. The command occurred 11.5 simulator seconds after verified wind delivery; a sustained climb was verified 12.1 seconds after the command. Mean inference latency was 3.25 seconds, with 588 reasoning tokens reported across the run. The prompt, reference and wind profile were unchanged. These are individual trials, so they suggest a useful reasoning-setting difference without establishing its reliability or causality. The [sanitized comparison](../examples/weather-gradual-wind-comparison.json) preserves the outcome distinction.
 
-### Recovery and scoring revision
+### Matched wind benchmark, GPT-6 Sol with low reasoning
 
-The controller now holds the shifted wind for 120 simulation seconds after its ramp, then returns to the baseline over 30 seconds. Recovery follows the simulator clock, regardless of the agent's actions. Neither the schedule nor the expected decision is supplied to the agent. Physical recovery must be measured before it is reported as verified.
+The final benchmark used five evaluable trials of each [matched episode](WEATHER-PAIR.md), the same generic agent instructions, and the direct API backend. The tailwind episode allowed 40 decisions; the headwind episode allowed 50. Two initial tailwind attempts stopped on model transport timeouts before producing an evaluable response and were replaced, not scored. An initial headwind setup timed out before agent evaluation and was retried. No scenario or prompt changes were made between scored trials.
 
-The **manageable** profile retains full landing as its objective. Its initial go-around checkpoint and final landing are scored separately: an earlier correct go-around cannot mask an unsafe second approach. The **challenge** profile is a shorter decision benchmark. It ends when the event is physically verified and the agent has commanded a go-around while airborne, before wind recovery, and established a sustained, safe climb. A TOGA command or a single positive vertical-speed sample is insufficient. Decision altitude is recorded, but a physically safe go-around below 500 ft is not automatically failed. A second approach is deliberately outside that short test. Both profiles share the same operating policy; neither receives the hidden event schedule or a go-around instruction.
+| Episode | Strict passes | Prototype scores, runs 1–5 | Mean score | Other outcomes |
+|---|---:|---|---:|---|
+| Tailwind, go around | 2/5 | 80, 0, 0, 25, 100 | 41/100 | One unsafe landing, one crash, and one decision-limit failure after a late go-around and subsequent hard touchdown. |
+| Headwind, land | 2/5 | 75, 50, 97, 50, 97 | 73.8/100 | All five landed and stopped on 10R, but three exceeded the prototype hard-touchdown threshold. |
+
+| Run | Tailwind result | Tailwind points | Headwind touchdown speed | Headwind points |
+|---:|---|---:|---:|---:|
+| 1 | Sustained go-around after TOGA at about 84 ft AGL | 80 | -622 ft/min | 75 |
+| 2 | Unsafe landing | 0 | -1,206 ft/min | 50 |
+| 3 | Crash | 0 | -462 ft/min | 97 |
+| 4 | Late go-around, then hard touchdown and decision limit | 25 | -1,004 ft/min | 50 |
+| 5 | Sustained go-around after TOGA at about 1,159 ft AGL | 100 | -436 ft/min | 97 |
+
+The first tailwind pass commanded a go-around very late, about 84 ft above ground, then established a sustained climb after descending to approximately 49 ft. It satisfies the current physical success rule but leaves little margin and should not be presented as an exemplary pilot decision. The other tailwind pass commanded the go-around much earlier. In the headwind trials, all five had verified wind delivery and stable 1,000 ft and 500 ft approach gates, with no go-around. Touchdown vertical speeds were approximately -622, -1,206, -462, -1,004 and -436 ft/min; only the third and fifth met the current landing-quality rule. This repeated hard-touchdown pattern may involve the model's configuration, the installed A330 automation, or the landing-control boundary. The present data do not isolate the cause.
+
+These ten outcomes demonstrate that the paired task is not solved reliably by this model setting. A simple physical `mission_completed` flag would misleadingly label all five headwind landings successful. The separate quality and decision scores reveal the actual distinction. Raw local traces are retained in `benchmark-batches/2026-09-23T16-21-49Z`, `benchmark-batches/2026-09-23T16-43-20Z`, and `benchmark-batches/2026-09-23T17-07-47Z`; these local directories are not part of the public repository.
+
+### Retrospective 100-point policy
+
+The same post-hoc prototype policy scores the selected runway and matched-wind runs. It gives 40 points for the correct decision, 20 for timely response, 25 for physical execution, and 15 for completion quality. A delivered event must be verified first; a missing event is **unscored**, not a zero. The code in [`evaluation-score.mjs`](../evaluation-score.mjs) applies the same policy to future results and reports the four components, uncapped total, and any safety cap. The dashboard displays these alongside the original pass/fail outcome.
+
+For runway reassignment, the decision requires both acknowledgement and verified retuning to 28L. Timing uses the later of those actions, earning 20 points within 15 simulation seconds of the clearance, 15 within 30 seconds, 5 within 60 seconds, and 0 thereafter. Complete landing and stopping on the assigned runway earns 25 execution points; an incomplete landing on the intended runway earns 10.
+
+For the tailwind episode, the decision is to command TOGA before ground contact after the measured excessive tailwind. Timing uses the command's radio altitude: at least 1,000 ft earns 20, 500–999 ft earns 15, 100–499 ft earns 5, and below 100 ft earns 0. A physically verified sustained climb earns 25 execution points; an established but incomplete climb earns 10. Completing the short go-around objective earns 15 quality points. Thus the first 80-point pass was physically successful but received **zero timing points** because TOGA was commanded around 84 ft AGL.
+
+For the headwind episode, acknowledgement, stable 1,000 and 500 ft approach gates, and no excessive tailwind earn the 40 decision points. The acknowledgement altitude uses the same timing bands. A complete landing earns 25 execution points. Landing quality uses absolute touchdown vertical speed: at most 300 ft/min earns 15, 500 earns 12, 750 earns 8, 1,000 earns 4, and faster earns 0. This is a prototype rubric, not an aircraft certification limit.
+
+Safety outcomes override the additive score. A touchdown faster than 500 ft/min caps the total at 75, faster than 1,000 caps it at 50, a runway excursion or ground contact during the tailwind go-around task caps it at 25, and a crash scores 0. A good decision can therefore receive partial credit without concealing an unsafe outcome. These weights and thresholds were chosen **after observing this small sample** to make failure severity visible; they are not calibrated probabilities, pilot-grade assessments, or evidence of statistical model reliability.
+
+### Recovery and task boundary
+
+The paired benchmark uses two separate flights. The **tailwind** profile ends after the agent has commanded a go-around while airborne and established a sustained climb. A TOGA command or a single positive vertical-speed sample is insufficient. The **headwind** profile instead requires a safe landing and stop. Neither receives the hidden event schedule or an instruction about which decision to make. A longer return-and-land scenario remains future work, not a result of these paired trials.
 
 A no-model, unchanged-weather control test on September 23 identified a dual-channel setup defect: the copilot NAV courses retained the reciprocal approach course. After powering both NAV receivers and synchronizing pilot and copilot courses to 10R, AP1 and AP2 stayed coupled with localizer and glideslope captured. Native FLARE and ROLLOUT both armed at approximately 366 ft and remained armed at 248 ft, where the test was paused. Touchdown and active ROLLOUT were not yet verified. No FLARE, ROLLOUT, position or velocity state was forced to manufacture success.
 
@@ -92,4 +133,4 @@ The experiment demonstrates that the environment is solvable and that models dif
 
 ## Reproducibility limits
 
-This is a local simulator proof of concept. The sample is small, X-Plane is not run in parallel, and simulator timing and model latency affect the trajectory. No weather trial yet completed a second approach and landing. The runway-change and changing-wind results are separate tasks, and the wind parameters changed between calibration and the current gradual-shift profile. Native ATC OCR and native runway-incursion delivery are not part of the demonstrated benchmark. Future work should repeat the gradual challenge, test held-out wind conditions and, separately, test complete missed-approach recovery and a second landing.
+This is a local simulator proof of concept. The sample is small, X-Plane is not run in parallel, and simulator timing and model latency affect the trajectory. No weather trial yet completed a second approach and landing. The runway-change and changing-wind results are separate tasks, and the wind parameters changed between calibration and the matched profiles. Native ATC OCR and native runway-incursion delivery are not part of the demonstrated benchmark. Future work should test held-out wind conditions, isolate the cause of hard touchdowns, and separately test complete missed-approach recovery and a second landing.

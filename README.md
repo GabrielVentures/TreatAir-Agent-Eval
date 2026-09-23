@@ -2,7 +2,7 @@
 
 An experimental deployment and evaluation system for tool-using AI agents. It connects a language model to X-Plane through a restricted cockpit action layer, introduces a controlled change during an approach, records the resulting trajectory, and scores whether the agent completes the task safely.
 
-The demonstration uses an Airbus A330 approaching Portland International Airport. The agent starts with a normal instruction to land at KPDX. One benchmark delivers a new runway clearance during the approach. A second, exploratory benchmark physically changes the approach wind so the agent must judge whether to continue or go around. Its challenging profile ends after a verified safe climb; a second landing is a separate future test. Both have been exercised in the live simulator. With the gradual wind shift, Sol and Luna without reasoning landed despite the prototype tailwind constraint; Sol with low reasoning recognized the constraint and completed a go-around. These individual trials need repetition before drawing reliability conclusions.
+The demonstration uses an Airbus A330 approaching Portland International Airport. The agent starts with a normal instruction to land at KPDX. One benchmark delivers a new runway clearance during the approach. A second, exploratory benchmark changes the approach wind. Its matched episodes test two different decisions: go around when a strong tailwind develops, or continue a safe approach when the same wind speed comes from a favorable direction. The episodes are separate flights, not a full missed-approach circuit. In five GPT-6 Sol low-reasoning trials per episode, 2/5 passed the tailwind objective and 2/5 passed the headwind landing-quality objective. See the evaluation report for the physical outcomes and limitations.
 
 The aviation setting is a concrete testbed for a broader deployment problem: how to move from a capable model demonstration to an agent workflow that is observable, constrained, repeatable, and measurable when the environment changes.
 
@@ -13,7 +13,7 @@ The aviation setting is a concrete testbed for a broader deployment problem: how
 - OpenAI Responses API and Codex execution backends.
 - A dashboard for setup, monitoring, model selection, instructions, and results.
 - Telemetry, action, message, and outcome logs.
-- A tested runway-change scenario and two changing-wind profiles with separate physical-delivery and approach-safety checks. The challenge wind profile has initial live-agent results.
+- A tested runway-change scenario and two matched changing-wind profiles with separate physical-delivery and approach-safety checks.
 - Tests for navigation geometry, setup, action isolation, observation wakeups, and evaluation logic.
 - A tested A330 situation and Apple Silicon macOS loader.
 
@@ -51,7 +51,7 @@ The repository includes sanitized sample outcomes in [examples](examples) and th
 
 ## Current status
 
-In the selected runway-change runs, Sol completed **5 of 5** missions and Luna completed **1 of 5**. These exploratory results illustrate the evaluation workflow; the small, selected sample is not a reliability estimate. See the [evaluation report](docs/EVALUATION.md) for results and limitations.
+In the selected runway-change runs, GPT-5.6 Sol completed **5 of 5** missions and GPT-5.6 Luna completed **1 of 5**. Their retrospective prototype scores averaged **100/100** and **60/100**, respectively. In the separate changing-wind benchmark, GPT-6 Sol with low reasoning passed **2 of 5** tailwind trials and **2 of 5** headwind trials, scoring averages of **41/100** and **73.8/100**. The points reflect decision, timing, execution and safety severity; they are not probabilities of safe flight. These small exploratory samples are not reliability estimates. See the [evaluation report](docs/EVALUATION.md) for per-run results, scoring rules and limitations.
 
 This is a proof of concept, not a certified flight system. The demonstrated scenario is intentionally narrow. Recent no-reasoning API trials completed the task with both Sol and Luna under some runs, while Luna also showed repeated decision-limit and rollout failures. The evidence is useful for studying agent reliability and tool design, not for claiming production autonomy.
 

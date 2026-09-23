@@ -19,7 +19,7 @@
               "landing_support_arm", "landing_support_disarm", "autobrake_mode",
               "heading", "altitude", "speed", "vertical_speed", "level_change", "level_off",
               "flaps", "gear", "nav1", "nav2", "nav_course", "tune_ils", "com1",
-              "approach", "localizer", "autopilot1", "autopilot2", "autopilot2_off", "toga", "autothrust",
+              "approach", "localizer", "autopilot1", "autopilot2", "autopilot2_off", "toga", "autothrust", "autothrust_disconnect",
               "acknowledge_message", "atc_window", "throttle_idle", "reverse_toggle",
               "wheel_brakes", "speedbrakes_arm", "speedbrakes_retract", "speedbrakes_deploy", "autobrake"
             ]

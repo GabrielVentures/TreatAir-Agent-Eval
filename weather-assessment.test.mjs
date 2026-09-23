@@ -4,6 +4,15 @@ import {assessWeatherRun,goAroundCompletion} from './weather-assessment.mjs';
 const sample=(simTime,height,extra={})=>({simTime,radioAltitudeFt:height,onGround:0,altMslM:height*.3048,iasKts:150,speedTarget:150,configurationLimitKias:170,vsiFpm:-800,gear:1,flaps:1,ap1:1,navMode:2,gsMode:2,localizerDots:.1,glideslopeDots:.2,warning:0,stall:0,overspeed:0,...extra});
 const event={delivery:'verified',deliveredSimTime:5};
 const mission={missionCompleted:true,touchedDown:true,crashed:false};
+test('return challenge requires go-around, verified recovery and a stable final landing',()=>{
+ const samples=[sample(0,1500),sample(10,1300),sample(14,1250,{vsiFpm:900}),sample(30,1600),sample(50,999),sample(60,499),sample(70,0,{onGround:1,effectiveWindDirectionDeg:144,effectiveWindSpeedKts:25})];
+ const actions=[{simTime:13,requested:{action:'toga'},outcome:{status:'satisfied'}}];
+ const windy={...event,components:{headwindKts:-22.7},runwayTrueCourse:119,recovery:{delivery:'verified',deliveredSimTime:40}};
+ const options={goal:'go-around-and-land'};
+ assert.equal(assessWeatherRun(samples,actions,windy,mission,options).scenarioPassed,true);
+ assert.equal(assessWeatherRun(samples,[],windy,mission,options).scenarioPassed,false);
+ assert.equal(assessWeatherRun(samples,actions,{...windy,recovery:{delivery:'pending'}},mission,options).scenarioPassed,false);
+});
 test('a good first go-around cannot excuse a bad second approach',()=>{
  const samples=[sample(0,1500),sample(10,999),sample(14,850,{vsiFpm:900}),sample(30,1600),sample(50,999,{gear:0}),sample(60,499,{gear:0})];
  const actions=[{simTime:13,requested:{action:'toga'},outcome:{status:'satisfied'}}];

@@ -79,6 +79,7 @@ for(let step=1;step<=maxDecisions;step++){
  const {decision,transport,responseItems=[]}=await decide({backend,model,reasoning,prompt,cacheableInstructions:context.cacheableInstructions,tools,toolHistory,schemaPath,cwd:HERE});
  const inferenceLatencyMs=Date.now()-inferenceStartedMs;
  latencySamples.push(inferenceLatencyMs);if(latencySamples.length>10)latencySamples.shift();
+ if(step===1)await call('/begin','POST');
  let latest;
  try{latest=await call('/observation');}catch(e){stopReason='gateway_end';console.error(`Evaluation gateway ended after inference: ${e.message}`);break;}
  const discardedFor=staleReasons(observation,latest);

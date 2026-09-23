@@ -9,6 +9,7 @@ import {spawn,execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {configureInstallation,installationSummary,loadConfig} from './installation.mjs';
 import {SCENARIOS,scenarioProfile} from './scenario-profiles.mjs';
+import {scoreEvaluation} from './evaluation-score.mjs';
 
 const HERE=path.dirname(fileURLToPath(import.meta.url));
 const DASH=path.join(HERE,'dashboard');
@@ -47,7 +48,9 @@ function stateSnapshot(){
  const run=safeRun(operator.run),telemetry=tailRows(run,'telemetry.jsonl',120),decisionRows=run?jsonRows(path.join(run,'model-decisions.jsonl')):[],decisions=decisionRows.slice(-40).map(compactDecision),actions=tailRows(run,'agent-actions.jsonl',100),events=tailRows(run,'events.jsonl',50),recordedMessages=tailRows(run,'messages.jsonl',50);
  const messages=[...recordedMessages,...(operator.lastMessages||[]),...(operator.scenarioMessages||[])].sort((a,b)=>(a.simTime??0)-(b.simTime??0)||(a.sequence??0)-(b.sequence??0));
  const uniqueMessages=[...new Map(messages.map(m=>[m.id||`${m.text}:${m.wallTime}`,m])).values()].slice(-30);
- return {serverTime:new Date().toISOString(),operator:{phase:operator.phase,ready:operator.ready,outcome:operator.outcome,run,scenarioId:operator.scenarioId,weatherEvent:operator.weatherEvent,activeRunway:operator.activeRunway,setupFailure:operator.setupFailure,setupProgress:operator.setupProgress,mission:operator.mission,event:operator.event,atc:operator.atc,landingHelper:operator.landingHelper},runner:readJson(path.join(ROOT,'dashboard-runner.json')),job:readJson(path.join(ROOT,'dashboard-job.json')),telemetry:telemetry.map(compactTelemetry),decisionTotal:decisionRows.length,decisions,actions:actions.slice(-50),events,messages:uniqueMessages,result:run?readJson(path.join(run,'result.json')):null};
+ const result=run?readJson(path.join(run,'result.json')):null;
+ if(result&&!result.score)result.score=scoreEvaluation({scenarioId:result.scenarioId||operator.scenarioId||'runway-change',result,actions:run?jsonRows(path.join(run,'agent-actions.jsonl')):[],messages:run?jsonRows(path.join(run,'messages.jsonl')):[]});
+ return {serverTime:new Date().toISOString(),operator:{phase:operator.phase,ready:operator.ready,outcome:operator.outcome,run,scenarioId:operator.scenarioId,weatherEvent:operator.weatherEvent,activeRunway:operator.activeRunway,setupFailure:operator.setupFailure,setupProgress:operator.setupProgress,mission:operator.mission,event:operator.event,atc:operator.atc,landingHelper:operator.landingHelper},runner:readJson(path.join(ROOT,'dashboard-runner.json')),job:readJson(path.join(ROOT,'dashboard-job.json')),telemetry:telemetry.map(compactTelemetry),decisionTotal:decisionRows.length,decisions,actions:actions.slice(-50),events,messages:uniqueMessages,result};
 }
 function listSituations(){if(!CFG.simRoot)return [];const dir=path.join(CFG.simRoot,'Output','situations');if(!fs.existsSync(dir))return [];return fs.readdirSync(dir).filter(name=>name.endsWith('.sit')).sort().map(name=>({name,path:path.join(dir,name),modifiedAt:fs.statSync(path.join(dir,name)).mtime.toISOString()}));}
 function contextCatalog(){const raw=readJson(contextCatalogFile);return Array.isArray(raw?.sources)?raw.sources:[];}

@@ -11,6 +11,7 @@ import {resumeForSetup} from './setup-resume.mjs';
 import {scenarioProfile,windPlan,weatherRecoveryStep} from './scenario-profiles.mjs';
 import {snapshotWeather,setWind,restoreWeather,interpolateWind,windDelivered,windComponents,angularDifference} from './weather-controller.mjs';
 import {assessWeatherRun,goAroundCompletion} from './weather-assessment.mjs';
+import {scoreEvaluation} from './evaluation-score.mjs';
 
 const HERE=path.dirname(fileURLToPath(import.meta.url));
 const args=process.argv.slice(2);
@@ -104,6 +105,7 @@ export function pilotState(s,previous=null){
  if(out.nextFlapLimitKias===9999)out.nextFlapLimitKias=null;
  Object.assign(out,{radioAltitudeFt:s.radioAltitudeFt,flareMode:s.flareMode,rolloutMode:s.rolloutMode,landingHelper:state().landingHelper||{armed:false}});
  out.altitudeIndicatedFt=Number.isFinite(s.altMslM)?s.altMslM/0.3048:null;
+ out.engines={fadecMode:s.fadec?.slice(0,2)??null,actualThrottleRatio:s.actualThrottle?.slice(0,2)??null,n1Percent:s.engineN1?.slice(0,2)??null};
  out.terrainClearanceFt=Number.isFinite(s.aglM)?s.aglM/0.3048:null;
  out.automation={heading:modeName('heading',s.headingMode),localizer:modeName('lateral',s.navMode),glideslope:modeName('glideslope',s.gsMode),vertical:modeName('vertical',s.verticalMode),autothrust:modeName('autothrust',s.athrOn),flightDirectorMaster:modeName('flightDirectorMaster',s.flightDirectorMaster),landingChannel:modeName('landingChannel',s.landingChannelMode),flare:modeName('autoland',s.flareMode),rollout:modeName('autoland',s.rolloutMode),dualChannelReady:s.ap1===1&&s.ap2===1&&s.flightDirectorMaster===2&&s.landingChannelMode===2};
  const navigation=state().navigation||[];
@@ -162,6 +164,8 @@ const F={
  nav1:'sim/cockpit2/radios/actuators/nav1_frequency_hz',nav2:'sim/cockpit2/radios/actuators/nav2_frequency_hz',nav1Power:'sim/cockpit2/radios/actuators/nav1_power',nav2Power:'sim/cockpit2/radios/actuators/nav2_power',nav1Id:'sim/cockpit2/radios/indicators/nav1_nav_id',nav2Id:'sim/cockpit2/radios/indicators/nav2_nav_id',nav1Course:'sim/cockpit2/radios/actuators/nav1_obs_deg_mag_pilot',nav2Course:'sim/cockpit2/radios/actuators/nav2_obs_deg_mag_pilot',nav1CopilotCourse:'sim/cockpit2/radios/actuators/nav1_obs_deg_mag_copilot',nav2CopilotCourse:'sim/cockpit2/radios/actuators/nav2_obs_deg_mag_copilot',com1:'sim/cockpit2/radios/actuators/com1_frequency_hz_833',radioRx:'sim/atc/com1_rx',facility:'sim/atc/com1_tuned_facility',windDirectionDeg:'sim/weather/aircraft/wind_direction_degt',windSpeedKts:'sim/weather/aircraft/wind_speed_kts',effectiveWindDirectionDeg:'sim/weather/aircraft/wind_now_direction_degt',effectiveWindSpeedKts:'sim/weather/aircraft/wind_now_speed_msc',leftBrake:'sim/cockpit2/controls/left_brake_ratio',rightBrake:'sim/cockpit2/controls/right_brake_ratio',autobrake:'sim/cockpit2/switches/auto_brake_level',reversers:'sim/cockpit2/annunciators/reverser_on',mouse:'sim/joystick/mouse_is_joystick',pitchInput:'sim/joystick/yoke_pitch_ratio',rollInput:'sim/joystick/yoke_roll_ratio',yawInput:'sim/joystick/yoke_heading_ratio',hardware:'sim/joystick/joy_mapped_axis_avail',override:'sim/operation/override/override_joystick',warning:'sim/cockpit2/annunciators/master_warning',caution:'sim/cockpit2/annunciators/master_caution',stall:'sim/cockpit2/annunciators/stall_warning',overspeed:'sim/cockpit2/annunciators/airspeed_warning'
 };
 F.overspeed='sim/flightmodel/failures/over_vfe';
+F.actualThrottle='sim/flightmodel/engine/ENGN_thro_use';
+F.engineN1='sim/cockpit2/engine/indicators/N1_percent';
 F.radioAltitudeFt='sim/cockpit2/gauges/indicators/radio_altimeter_height_ft_pilot';
 F.flareMode='sim/cockpit2/autopilot/flare_status';
 F.rolloutMode='sim/cockpit2/autopilot/rollout_status';
@@ -675,15 +679,17 @@ async function advanceWeatherScenario(s,profile){
  const recoveryStart=event.startedSimTime+plan.rampSeconds+plan.holdSeconds;
  const recoveryStep=weatherRecoveryStep(plan,event.startedSimTime,s.simTime);
  if(recoveryStep!==null){
+  const recoveryWind=plan.recovery||plan.baseline;
   const step=recoveryStep;
   if(!event.recovery){event={...event,status:'recovering',recovery:{startedSimTime:recoveryStart,lastStep:-1,delivery:'pending'}};update({weatherEvent:event});}
   if(step>event.recovery.lastStep){
-   const requested=interpolateWind(plan.target,plan.baseline,step/plan.recoverySteps);
+   const requested=interpolateWind(plan.target,recoveryWind,step/plan.recoverySteps);
    await setWind(api,state().weatherBackup,requested,state().nav.elevationFt);
-   event={...event,recovery:{...event.recovery,lastStep:step,requested}};update({weatherEvent:event});
+   event={...event,recovery:{...event.recovery,lastStep:step,requested,finalRequestedSimTime:step===plan.recoverySteps?s.simTime:event.recovery.finalRequestedSimTime}};update({weatherEvent:event});
    log('events',{...stamp(s.simTime),type:'weather_recovery_step',step,requested});
+   if(step===plan.recoverySteps)return;
   }
-  if(step===plan.recoverySteps&&event.recovery.delivery!=='verified'&&angularDifference(s.effectiveWindDirectionDeg,plan.baseline.directionDeg)<=15&&Math.abs(s.effectiveWindSpeedKts-plan.baseline.speedKts)<=3){
+  if(step===plan.recoverySteps&&s.simTime>event.recovery.finalRequestedSimTime&&event.recovery.delivery!=='verified'&&angularDifference(s.effectiveWindDirectionDeg,recoveryWind.directionDeg)<=8&&Math.abs(s.effectiveWindSpeedKts-recoveryWind.speedKts)<=2){
    const sequence=(state().scenarioMessageSequence||0)+1;
    const message={...stamp(s.simTime),id:`scenario-${sequence}`,sequence,source:'simulated-weather-report',sender:`${CFG.airport} weather`,text:`Updated approach-area wind: from ${Math.round(s.effectiveWindDirectionDeg)} degrees true at ${Math.round(s.effectiveWindSpeedKts)} knots.`,acknowledged:false};
    event={...event,status:'recovered',recovery:{...event.recovery,delivery:'verified',deliveredSimTime:s.simTime}};
@@ -758,6 +764,7 @@ export const ACTIONS={
  autopilot2_off:{description:'Disengage the second autopilot channel when leaving a dual-channel approach. Verify AP1 and the active guidance modes afterward; this does not choose a new trajectory.'},
  toga:{description:'Move both A330 thrust levers to the TOGA detent and request native takeoff/go-around guidance. This does not select a missed-approach heading, altitude or speed. Verify thrust, guidance modes and an actual climb; later return thrust levers to CLB as appropriate.'},
  autothrust:{description:'Engage selected-speed autothrust and place both A330 thrust levers in the CLB detent required for normal airborne A/THR control'},
+ autothrust_disconnect:{command:'sim/autopilot/autothrottle_hard_off',description:'Press the native autothrust disconnect control: disengage and disarm A/THR. Does not select thrust lever position or a flight path. Can clear a retained thrust state, but low-speed protection may reactivate if unsafe conditions persist. Check airspeed, engine output and guidance; use autothrust separately to re-arm/re-engage when appropriate.'},
  acknowledge_message:{valueType:'string',description:'Acknowledge a received communication by its exact message id. Native messages use the verified ATC readback command.'},atc_window:{command:'sim/operation/contact_atc'}
 };
 // Normal cockpit controls needed for rollout; no joystick or physics override access.
@@ -794,7 +801,8 @@ export function actionOutcome(body,s){
   case 'autopilot2':ok=s.ap1===1&&s.ap2===1&&s.flightDirectorMaster===2&&s.landingChannelMode===2;pendingReason=`AP1/AP2 ${s.ap1}/${s.ap2}, FD master ${modeName('flightDirectorMaster',s.flightDirectorMaster)}, landing channel ${modeName('landingChannel',s.landingChannelMode)}, FLARE/ROLLOUT ${modeName('autoland',s.flareMode)}/${modeName('autoland',s.rolloutMode)}`;break;
   case 'autopilot2_off':ok=s.ap2===0;pendingReason=`AP2 ${s.ap2}`;break;
   case 'toga':ok=Array.isArray(s.throttles)&&s.throttles.slice(0,2).every(x=>x>=.95);pendingReason=`thrust levers ${JSON.stringify(s.throttles)}, heading ${modeName('heading',s.headingMode)}; confirm positive climb in subsequent observations`;successReason='TOGA thrust lever positions verified; guidance and actual climb require subsequent confirmation';break;
-  case 'autothrust':ok=s.athrOn===1;pendingReason=`autothrust ${modeName('autothrust',s.athrOn)}`;break;
+  case 'autothrust':ok=s.athrOn===1;pendingReason=`autothrust ${modeName('autothrust',s.athrOn)}, FADEC modes ${JSON.stringify(s.fadec?.slice(0,2))}, actual throttle ${JSON.stringify(s.actualThrottle?.slice(0,2))}`;break;
+  case 'autothrust_disconnect':ok=s.athrOn===0&&s.athrMode===-1;pendingReason=`autothrust on=${s.athrOn}, mode=${s.athrMode}; protection may reactivate`;successReason='Autothrust disengaged and disarmed; monitor engine output and aircraft state';break;
   case 'go_around':ok=s.ap1===1&&s.fdMasterPilot===1&&s.athrOn===1&&s.headingMode===1&&s.verticalMode===2&&s.verticalTarget>0;pendingReason='go-around targets are selected but one or more control modes are not active';break;
   case 'flaps':ok=near(s.flaps,body.value,.01);pendingReason=`flap handle ${s.flaps}`;break;
   case 'gear':ok=s.gear===body.value;pendingReason=`gear handle ${s.gear}`;break;
@@ -809,7 +817,7 @@ export function actionOutcome(body,s){
   case 'speedbrakes_deploy':ok=near(s.spoilers,1,.05);pendingReason=`speedbrake ratio ${s.spoilers}`;break;
   case 'wheel_brakes':ok=near(s.leftBrake,body.value,.05)&&near(s.rightBrake,body.value,.05);pendingReason=`brakes ${s.leftBrake}/${s.rightBrake}`;break;
   case 'autobrake':ok=s.autobrake===body.value;pendingReason=`autobrake ${s.autobrake}`;break;
-  case 'throttle_idle':ok=Array.isArray(s.throttles)&&s.throttles.every(x=>x<=.05);pendingReason=`throttles ${JSON.stringify(s.throttles)}`;break;
+  case 'throttle_idle':ok=Array.isArray(s.throttles)&&s.throttles.slice(0,2).every(x=>x<=.05)&&Array.isArray(s.actualThrottle)&&s.actualThrottle.slice(0,2).every(x=>x<=.05);pendingReason=`lever positions ${JSON.stringify(s.throttles?.slice(0,2))}, actual throttle ${JSON.stringify(s.actualThrottle?.slice(0,2))}, FADEC modes ${JSON.stringify(s.fadec?.slice(0,2))}; idle lever selection alone does not verify reduced engine output`;successReason='Idle levers and low actual throttle verified; engine spool-down and deceleration require monitoring';break;
   case 'reverse_toggle':ok=Array.isArray(s.reversers)&&s.reversers.some(Boolean);pendingReason=`reversers ${JSON.stringify(s.reversers)}`;break;
  }
  return ok?{status:'satisfied',reason:successReason}:{status:'pending',reason:pendingReason};
@@ -939,16 +947,18 @@ async function serviceLandingSupport(s){
 }
 async function start(){
  const profile=chosenScenario();
+ const preflight=args.includes('--preflight');
  if(state().scenarioId!==profile.id)throw Error(`Prepared scenario ${state().scenarioId} does not match requested ${profile.id}; prepare again.`);
  const check=await status();if(!check.ready)throw Error('NOT READY: '+JSON.stringify({phase:check.phase,checks:check.checks,atc:check.atc}));
  const lock=path.join(ROOT,'evaluation.lock');const fd=fs.openSync(lock,'wx');fs.writeSync(fd,String(process.pid));fs.closeSync(fd);
  currentRun=state().run;const token=crypto.randomBytes(24).toString('hex'),instructions=fs.readFileSync(path.join(HERE,'OPERATING_INSTRUCTIONS.md'),'utf8');save(path.join(ROOT,'agent-access.json'),{url:`http://127.0.0.1:${CFG.agentPort}`,token});
- let stopping=false,agentFinish=null,lastAgentObservation=null;
+ let stopping=false,agentFinish=null,lastAgentObservation=null,beginRequested=!preflight;
  const server=http.createServer(async(req,res)=>{try{if(req.headers.authorization!==`Bearer ${token}`){res.writeHead(401);return res.end();}let out;
  if(req.method==='GET'&&req.url==='/observation'){const raw=await observe(),op=state(),messages=[...(op.lastMessages||[]),...(op.scenarioMessages||[])].sort((a,b)=>(a.simTime??0)-(b.simTime??0)||(a.sequence??0)-(b.sequence??0));out={state:pilotState(raw,lastAgentObservation),messages,communicationRevision:messages.map(m=>`${m.id}:${m.acknowledged?'ack':'new'}`).join('|'),budget:{simulationSecondsRemaining:Math.max(0,CFG.maxEvalSimSeconds-(raw.simTime-(op.evaluationStartSimTime??raw.simTime))),wallSecondsRemaining:Math.max(0,CFG.maxEvalWallSeconds-(Date.now()-(op.evaluationStartedAt??Date.now()))/1000)},communications:{mode:'simulated clearance and weather reports; acknowledge messages by id; interactive clearance requests are not implemented',lastObserved:op.lastOcrAt||null}};lastAgentObservation=raw;}
  else if(req.method==='GET'&&req.url==='/instructions')out={mission:'Land the aircraft at KPDX',operatingInstructions:instructions};
  else if(req.method==='GET'&&req.url==='/controls')out=Object.fromEntries(Object.entries(ACTIONS).map(([name,a])=>[name,{requiresValue:Boolean(a.ref||a.refs||a.valueType),valueType:a.valueType||(a.ref||a.refs?'number':null),min:a.min,max:a.max,values:name==='tune_ils'?(state().navigation||[]).map(n=>n.runway):a.values,description:a.description}]));
  else if(req.method==='GET'&&req.url==='/navigation')out={planned:state().nav,availableRunways:state().navigation||[state().nav]};
+ else if(req.method==='POST'&&req.url==='/begin'){beginRequested=true;out={accepted:true};}
  else if(req.method==='POST'&&req.url==='/action'){let raw='';for await(const b of req){raw+=b;if(raw.length>4096)throw Error('Body too large');}out=await agentAction(JSON.parse(raw));}
  else if(req.method==='POST'&&req.url==='/finish'){let raw='';for await(const b of req){raw+=b;if(raw.length>4096)throw Error('Body too large');}agentFinish=JSON.parse(raw||'{}');out={accepted:true};}
  else{res.writeHead(404);return res.end();}
@@ -959,7 +969,14 @@ async function start(){
  const initial={...stamp(first.simTime),id:'initial-clearance',source:'simulated-atc',sender:`${CFG.airport} Tower`,text:`Cleared for approach and landing runway ${state().activeRunway}.`,acknowledged:false};update({scenarioMessages:[initial]});log('messages',initial);
 let last=first,lastOCR=0,armAt=null,touchdown=null,stopCount=0,crashed=false,runwayExcursion=false,outcome='operator_stopped';
 const evaluationSamples=[];
- try{await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(CFG.agentPort,'127.0.0.1',resolve);});update({phase:'EVALUATING',ready:false});await api.resume();
+ try{await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(CFG.agentPort,'127.0.0.1',resolve);});update({phase:'EVALUATING',ready:false});
+ if(preflight){
+  const deadline=Date.now()+180000;
+  while(!beginRequested&&!stopping&&Date.now()<deadline)await sleep(100);
+  if(!beginRequested)throw Error(stopping?'Evaluation stopped before preflight decision':'Timed out waiting for the first preflight decision');
+  log('events',{...stamp(first.simTime),type:'preflight_decision_ready'});
+ }
+ if(!stopping)await api.resume();
  console.log(JSON.stringify({running:true,agentAccessFile:path.join(ROOT,'agent-access.json'),mission:'Land the aircraft at KPDX'}));
  while(!stopping){await sleep(CFG.sampleIntervalMs);const s=await observe();log('telemetry',{phase:'evaluation',...s});evaluationSamples.push(s);if(agentFinish){last=s;const a=assessMission(touchdown,state().activeNav||state().nav,crashed,s);outcome=a.missionCompleted?'mission_completed':agentFinish.reason==='decision_limit'?'decision_limit':'agent_stopped';log('events',{...stamp(s.simTime),type:'agent_finish',...agentFinish,assessment:a});break;}if(s.simTime<last.simTime){outcome='infrastructure_sim_reset';break;}if(s.paused||s.simSpeed!==1){outcome='interrupted_or_time_changed';break;}
  if(CFG.atc.windowId&&CFG.atc.roi&&Date.now()-lastOCR>CFG.atc.intervalMs){try{await captureATC();lastOCR=Date.now();}catch(e){log('events',{...stamp(s.simTime),type:'observation_failure',error:e.message});lastOCR=Date.now();if(!CFG.pocMode){outcome='infrastructure_communications_failure';break;}}}
@@ -977,7 +994,7 @@ const evaluationSamples=[];
  if(elapsed>CFG.maxEvalSimSeconds||Date.now()-begin>CFG.maxEvalWallSeconds*1000){outcome='time_limit';last=s;break;}last=s;
  }
  }catch(e){outcome='infrastructure_failure';log('events',{...stamp(),error:e.message});throw e;}
- finally{try{await api.pause();}finally{server.close();fs.unlinkSync(lock);const intendedNav=state().activeNav||state().nav,assessment=assessMission(touchdown,intendedNav,crashed,last),weatherAssessment=profile.kind==='weather'?assessWeatherRun(evaluationSamples,rows(currentRun,'agent-actions.jsonl'),state().weatherEvent,assessment,{goal:profile.goal}):null;const result={...stamp(last.simTime),outcome,scenarioId:profile.id,intendedRunway:intendedNav?.runway,...assessment,weatherAssessment,weatherEvent:state().weatherEvent,fuelStartKg:first.fuelKg,fuelRemainingKg:last.fuelKg,fuelUsedKg:first.fuelKg-last.fuelKg,start:first,final:last,touchdown,event:state().event,saves:checkProtected()};update({phase:'FINISHED',outcome,mission:assessment,ready:false});save(path.join(currentRun,'result.json'),result);if(profile.kind==='weather')try{await restoreWeather(api,state().weatherBackup);log('events',{...stamp(),type:'weather_restored'});}catch(error){log('events',{...stamp(),type:'weather_restore_failed',error:error.message});}}}
+ finally{try{await api.pause();}finally{server.close();fs.unlinkSync(lock);const intendedNav=state().activeNav||state().nav,assessment=assessMission(touchdown,intendedNav,crashed,last),actions=rows(currentRun,'agent-actions.jsonl'),messages=rows(currentRun,'messages.jsonl'),weatherAssessment=profile.kind==='weather'?assessWeatherRun(evaluationSamples,actions,state().weatherEvent,assessment,{goal:profile.goal}):null;const result={...stamp(last.simTime),outcome,scenarioId:profile.id,intendedRunway:intendedNav?.runway,...assessment,weatherAssessment,weatherEvent:state().weatherEvent,fuelStartKg:first.fuelKg,fuelRemainingKg:last.fuelKg,fuelUsedKg:first.fuelKg-last.fuelKg,start:first,final:last,touchdown,event:state().event,saves:checkProtected()};result.score=scoreEvaluation({scenarioId:profile.id,result,actions,messages});update({phase:'FINISHED',outcome,mission:assessment,ready:false});save(path.join(currentRun,'result.json'),result);if(profile.kind==='weather')try{await restoreWeather(api,state().weatherBackup);log('events',{...stamp(),type:'weather_restored'});}catch(error){log('events',{...stamp(),type:'weather_restore_failed',error:error.message});}}}
 }
 function rows(p,name){const file=p&&path.join(p,name);return file&&fs.existsSync(file)?fs.readFileSync(file,'utf8').trim().split('\n').filter(Boolean).map(JSON.parse):[];}
 function report(){
@@ -996,7 +1013,7 @@ function report(){
  if(op.scenarioId?.startsWith('weather-'))limitations.push('Selected-speed tracking is not a verified weight-dependent A330 VAPP calculation; stabilization gates are prototype policy, not certification');
  limitations.push('Same-host action allowlist is not an operating-system security boundary','Touchdown values are sampled at the configured interval, not exact per-frame contact values');
  if(!result)limitations.push('No final evaluated AI flight has been run');
- return {phase:op.phase,ready:op.ready,run:p,scenarioId:op.scenarioId||'runway-change',setupFailure:op.setupFailure,atc:op.atc,event:op.event,weatherEvent:op.weatherEvent,weatherAssessment:result?.weatherAssessment||null,outcome:result?.outcome||op.outcome||null,objectives:corrected,records:{telemetry:samples.length,evaluation:evals.length,actions:actions.length,messages:messages.length,events:events.length},metrics,sourceFiles:checkProtected(),limitations};
+ return {phase:op.phase,ready:op.ready,run:p,scenarioId:op.scenarioId||'runway-change',setupFailure:op.setupFailure,atc:op.atc,event:op.event,weatherEvent:op.weatherEvent,weatherAssessment:result?.weatherAssessment||null,outcome:result?.outcome||op.outcome||null,objectives:corrected,score:result?scoreEvaluation({scenarioId:result.scenarioId||op.scenarioId||'runway-change',result,actions,messages}):null,records:{telemetry:samples.length,evaluation:evals.length,actions:actions.length,messages:messages.length,events:events.length},metrics,sourceFiles:checkProtected(),limitations};
 }
-async function main(){const op=args[0];if(op==='nav')return navData(args[1]||CFG.runway);if(op==='status')return status();if(op==='readiness')return readiness();if(op==='setup')return setup();if(op==='stabilize')return stabilize();if(op==='smoke-action')return smokeAction();if(op==='start')return start();if(op==='trigger')return trigger(args[1]);if(op==='scenario'&&args[1]==='runway-change')return applyRunwayChange();if(op==='clear')return trigger('clear');if(op==='pause'){await api.pause();return {paused:true};}if(op==='atc'){if(args[1]==='open'){await api.command('sim/operation/contact_atc');return {requested:true};}if(args[1]==='readback'){await api.command('sim/operation/atc_readback');return {requested:true};}return atcVerify();}if(op==='report')return report();throw Error('Usage: node scenario.mjs nav [RUNWAY]|setup [--scenario runway-change|weather-mild|weather-challenge] [--sit PATH] [--reuse-loaded]|stabilize|smoke-action ACTION [JSON_VALUE]|status|readiness|start [--scenario ID] [--no-scenario-event]|trigger arm|trigger execute|scenario runway-change|clear|atc open|atc readback|atc verify [--confirm-current-clearance]|pause|report [--config FILE]');}
+async function main(){const op=args[0];if(op==='nav')return navData(args[1]||CFG.runway);if(op==='status')return status();if(op==='readiness')return readiness();if(op==='setup')return setup();if(op==='stabilize')return stabilize();if(op==='smoke-action')return smokeAction();if(op==='start')return start();if(op==='trigger')return trigger(args[1]);if(op==='scenario'&&args[1]==='runway-change')return applyRunwayChange();if(op==='clear')return trigger('clear');if(op==='pause'){await api.pause();return {paused:true};}if(op==='atc'){if(args[1]==='open'){await api.command('sim/operation/contact_atc');return {requested:true};}if(args[1]==='readback'){await api.command('sim/operation/atc_readback');return {requested:true};}return atcVerify();}if(op==='report')return report();throw Error('Usage: node scenario.mjs nav [RUNWAY]|setup [--scenario runway-change|weather-mild|weather-challenge|weather-headwind] [--sit PATH] [--reuse-loaded]|stabilize|smoke-action ACTION [JSON_VALUE]|status|readiness|start [--scenario ID] [--no-scenario-event]|trigger arm|trigger execute|scenario runway-change|clear|atc open|atc readback|atc verify [--confirm-current-clearance]|pause|report [--config FILE]');}
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url))main().then(x=>{if(x!==undefined)console.log(JSON.stringify(x,null,2));}).catch(e=>{console.error(JSON.stringify({error:e.message}));process.exitCode=1;});

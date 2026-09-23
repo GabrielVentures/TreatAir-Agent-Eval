@@ -85,6 +85,15 @@ test('autothrust recovery arms only when unavailable and always selects speed mo
  assert.deepEqual(autothrustCommands(0,0),['sim/autopilot/autothrottle_on','laminar/A333/autopilot/speed_knob_pull']);
  assert.deepEqual(autothrustCommands(1,1),['laminar/A333/autopilot/speed_knob_pull']);
 });
+test('thrust tools expose disconnect and distinguish levers from engine output',()=>{
+ assert.equal(ACTIONS.autothrust_disconnect.command,'sim/autopilot/autothrottle_hard_off');
+ const s={throttles:[0,0],actualThrottle:[.74,.74],fadec:[3,3],engineN1:[89,89],athrOn:0,athrMode:0};
+ assert.equal(actionOutcome({action:'throttle_idle'},s).status,'pending');
+ assert.equal(actionOutcome({action:'throttle_idle'},{...s,actualThrottle:[0,0]}).status,'satisfied');
+ assert.equal(actionOutcome({action:'autothrust_disconnect'},s).status,'pending');
+ assert.equal(actionOutcome({action:'autothrust_disconnect'},{...s,athrMode:-1}).status,'satisfied');
+ assert.deepEqual(pilotState(s).engines,{fadecMode:[3,3],actualThrottleRatio:[.74,.74],n1Percent:[89,89]});
+});
 test('missing state fails closed',{skip:!hasInstalledNavigation},()=>{const f=setupChecks({},navData());assert.ok(f.includes('required telemetry unavailable'));assert.ok(f.length>5);});
 test('mission completion requires intended runway, stop and no crash',()=>{
  const nav={landingLengthM:2800,widthM:45},touchdown={track:{alongRunwayM:400,crossTrackM:2},preContactVsiFpm:-250,rolloutMode:2};

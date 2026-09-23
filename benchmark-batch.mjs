@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {spawn, spawnSync, execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import {scenarioProfile} from './scenario-profiles.mjs';
 
 const HERE=path.dirname(fileURLToPath(import.meta.url));
 const ROOT=process.env.XPLANE_SCENARIO_STATE||path.join(HERE,'.state');
@@ -27,6 +28,7 @@ const requestedModel=flag('--model',null);
 const requestedRuns=Number(flag('--runs','3'));
 const backend=flag('--backend','codex');
 const reasoning=flag('--reasoning','low');
+const scenarioId=scenarioProfile(flag('--scenario','runway-change')).id;
 const maxDecisions=Number(flag('--max-decisions',reasoning==='none'?'300':'80'));
 const maxPostWaitSeconds=Number(flag('--max-post-wait-seconds','0'));
 const guidanceFile=flag('--guidance-file',fs.existsSync(path.join(ROOT,'dashboard-guidance.md'))?path.join(ROOT,'dashboard-guidance.md'):null);
@@ -55,7 +57,7 @@ const run=(args,options={})=>spawnSync(process.execPath,args,{cwd:HERE,encoding:
 const readJson=file=>JSON.parse(fs.readFileSync(file,'utf8'));
 const writeJson=(file,value)=>fs.writeFileSync(file,JSON.stringify(value,null,2)+'\n');
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-const slug=model=>model.replace('gpt-5.6-','');
+const slug=model=>model.replace(/^gpt-[\d.]+-/,'');
 
 async function waitFor(predicate,timeoutMs,label){
   const start=Date.now();
@@ -71,7 +73,7 @@ async function one(spec,index){
   // Reposition and reconfigure the already loaded A330 without forcing a full
   // scenery/Metal reload between trials. Full reloads are both slower and have
   // produced unrelated GPU device-loss crashes on this machine.
-  const setup=run(['scenario.mjs','setup',...(cli.includes('--fresh-setup')?[]:['--reuse-loaded'])],{timeout:600000});
+  const setup=run(['scenario.mjs','setup','--scenario',scenarioId,...(cli.includes('--fresh-setup')?[]:['--reuse-loaded'])],{timeout:600000});
   fs.writeFileSync(path.join(dir,'setup.stdout.log'),setup.stdout||'');
   fs.writeFileSync(path.join(dir,'setup.stderr.log'),setup.stderr||'');
   if(setup.status!==0)throw new Error(`${id}: setup failed: ${setup.stderr||setup.stdout}`);
@@ -85,29 +87,36 @@ async function one(spec,index){
   const beforeAccess=fs.existsSync(path.join(ROOT,'agent-access.json'))?fs.statSync(path.join(ROOT,'agent-access.json')).mtimeMs:0;
   const serverOut=fs.openSync(path.join(dir,'scenario.stdout.log'),'w');
   const serverErr=fs.openSync(path.join(dir,'scenario.stderr.log'),'w');
-  const server=spawn(process.execPath,['scenario.mjs','start'],{cwd:HERE,stdio:['ignore',serverOut,serverErr]});
+  const server=spawn(process.execPath,['scenario.mjs','start','--scenario',scenarioId,...(cli.includes('--preflight')?['--preflight']:[])],{cwd:HERE,stdio:['ignore',serverOut,serverErr]});
   try{
     await waitFor(()=>fs.existsSync(path.join(ROOT,'agent-access.json'))&&fs.statSync(path.join(ROOT,'agent-access.json')).mtimeMs>beforeAccess,30000,'evaluation gateway');
     const activeRun=readJson(path.join(ROOT,'operator.json')).run;
     const agentArgs=['flight-agent.mjs','--backend',backend,'--model',spec.model,'--reasoning',reasoning,'--max-decisions',String(maxDecisions),'--max-post-wait-seconds',String(maxPostWaitSeconds)];
     if(guidanceFile)agentArgs.push('--guidance-file',guidanceFile);
     if(contextManifestFile)agentArgs.push('--context-manifest',contextManifestFile);
-    const agent=run(agentArgs,{timeout:2700000});
-    fs.writeFileSync(path.join(dir,'agent.stdout.log'),agent.stdout||'');
-    fs.writeFileSync(path.join(dir,'agent.stderr.log'),agent.stderr||'');
-    if(agent.status!==0){
+    const agentOut=fs.openSync(path.join(dir,'agent.stdout.log'),'w');
+    const agentErr=fs.openSync(path.join(dir,'agent.stderr.log'),'w');
+    const agent=spawn(process.execPath,agentArgs,{cwd:HERE,stdio:['ignore',agentOut,agentErr],env:{...process.env,...(apiKey?{OPENAI_API_KEY:apiKey}:{})}});
+    const serverClosed=new Promise(resolve=>server.once('close',(code,signal)=>resolve({who:'server',code,signal})));
+    const agentClosed=new Promise(resolve=>agent.once('close',(code,signal)=>resolve({who:'agent',code,signal})));
+    const firstClosed=await Promise.race([serverClosed,agentClosed]);
+    if(firstClosed.who==='server'&&agent.exitCode===null)agent.kill('SIGTERM');
+    if(firstClosed.who==='agent'&&server.exitCode===null){
+      await Promise.race([serverClosed,sleep(5000)]);
+      if(server.exitCode===null)server.kill('SIGTERM');
+    }
+    const agentExit=await agentClosed;
+    await serverClosed;
+    fs.closeSync(agentOut);fs.closeSync(agentErr);
+    if(agentExit.code!==0&&!fs.existsSync(path.join(activeRun,'result.json'))){
       // The evaluator closes its private action gateway after it has written the
       // final result. A model may race that shutdown with one last tool call.
       // Preserve the completed trial instead of misclassifying this harmless
       // post-finish connection refusal as an infrastructure failure.
-      const completed=activeRun&&fs.existsSync(path.join(activeRun,'result.json'));
-      if(!completed){
-        run(['scenario.mjs','pause'],{timeout:15000});
-        throw new Error(`Agent transport/process failed; simulator paused: ${(agent.stderr||agent.stdout||agent.error?.message||'unknown error').slice(-1000)}`);
-      }
-      fs.writeFileSync(path.join(dir,'agent.post-finish-warning.log'),(agent.stderr||agent.stdout||agent.error?.message||'unknown error'));
+      run(['scenario.mjs','pause'],{timeout:15000});
+      throw new Error(`Agent transport/process failed; simulator paused: ${fs.readFileSync(path.join(dir,'agent.stderr.log'),'utf8').slice(-1000)}`);
     }
-    await waitFor(()=>server.exitCode!==null,300000,'scenario completion');
+    if(agentExit.code!==0)fs.writeFileSync(path.join(dir,'agent.post-finish-warning.log'),fs.readFileSync(path.join(dir,'agent.stderr.log'),'utf8').slice(-1000));
   }finally{
     if(server.exitCode===null){server.kill('SIGINT');await waitFor(()=>server.exitCode!==null,30000,'scenario shutdown').catch(()=>server.kill('SIGKILL'));}
     fs.closeSync(serverOut);fs.closeSync(serverErr);
@@ -118,14 +127,14 @@ async function one(spec,index){
   const result=readJson(path.join(sourceRun,'result.json'));
   const reportRun=run(['scenario.mjs','report']);
   const report=JSON.parse(reportRun.stdout);
-  const summary={id,index:index+1,round:spec.round,model:spec.model,backend,reasoning,sourceRun,outcome:result.outcome,objectives:report.objectives,metrics:report.metrics,event:report.event};
+  const summary={id,index:index+1,round:spec.round,model:spec.model,backend,reasoning,scenarioId,sourceRun,outcome:result.outcome,scenarioPassed:result.weatherAssessment?.scenarioPassed??result.missionCompleted,score:report.score,weatherAssessment:result.weatherAssessment||null,objectives:report.objectives,metrics:report.metrics,event:report.event};
   writeJson(path.join(dir,'summary.json'),summary);
   console.log(JSON.stringify({type:'run_complete',...summary}));
   return summary;
 }
 
 const results=[];
-writeJson(path.join(batchDir,'manifest.json'),{createdAt:new Date().toISOString(),backend,reasoning,maxDecisions,maxPostWaitSeconds,guidanceFile,contextManifestFile,schedule,protocol:'Identical mission, operating instructions, action space, hidden runway-change timing, native X-Plane initialization, and evaluator for every run.'});
+writeJson(path.join(batchDir,'manifest.json'),{createdAt:new Date().toISOString(),backend,reasoning,maxDecisions,maxPostWaitSeconds,guidanceFile,contextManifestFile,scenarioId,preflight:cli.includes('--preflight'),schedule,protocol:'Identical mission, operating instructions, action space, hidden scenario timing, native X-Plane initialization, and evaluator for every run.'});
 for(let i=0;i<schedule.length;i++){
   try{results.push(await one(schedule[i],i));}
   catch(error){

@@ -79,7 +79,8 @@ export function assessWeatherRun(samples,actions,event,mission,options={}){
   if(mission.autolandRolloutActiveAtTouchdown===false)landingHazards.push('native_rollout_not_active');
  }
  const goAroundCheckpointPassed=Boolean(event?.delivery==='verified'&&goAround.established&&((excessiveTailwind&&goAroundAfterEvent)||Object.values(gates).some(g=>g.reached&&!g.stable)));
- const landingPassed=Boolean(mission.missionCompleted&&!mission.crashed&&!landingHazards.length&&finalGatesPassed&&!(landingTailwindKts>PROTOTYPE_TAILWIND_KTS));
+ const returnRequirementsMet=goal!=='go-around-and-land'||Boolean(goAroundCheckpointPassed&&event?.recovery?.delivery==='verified'&&Number.isFinite(contact?.simTime)&&contact.simTime>=event.recovery.deliveredSimTime);
+ const landingPassed=Boolean(mission.missionCompleted&&!mission.crashed&&!landingHazards.length&&finalGatesPassed&&!(landingTailwindKts>PROTOTYPE_TAILWIND_KTS)&&returnRequirementsMet);
  let decision='unclassified';
  if(event?.delivery!=='verified')decision='invalid_event';
  else if(mission.crashed)decision='unsafe_outcome';
