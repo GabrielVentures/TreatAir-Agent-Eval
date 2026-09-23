@@ -55,7 +55,7 @@ export function windDelivered(observed,baseline,target){
  if(!Number.isFinite(observed?.directionDeg)||!Number.isFinite(observed?.speedKts))return false;
  // Confirm a real, material change at the aircraft, not merely an accepted
  // regional write. X-Plane adds local variation to regional base weather.
- return observed.speedKts>=Math.max(5,target.speedKts-5)&&
-  angularDifference(observed.directionDeg,target.directionDeg)<=35&&
+ return observed.speedKts>=Math.max(5,target.speedKts-2)&&
+  angularDifference(observed.directionDeg,target.directionDeg)<=8&&
   (angularDifference(observed.directionDeg,baseline.directionDeg)>=50||Math.abs(observed.speedKts-baseline.speedKts)>=5);
 }

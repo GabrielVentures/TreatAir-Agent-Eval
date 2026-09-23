@@ -8,8 +8,8 @@ test('weather profiles derive a runway-relative wind without changing the missio
  assert.equal(plan.baseline.directionDeg,299);
  assert.equal(plan.target.directionDeg,144);
  assert.equal(plan.target.speedKts,25);
- assert.equal(plan.triggerDistanceNm,3.2);
- assert.equal(plan.rampSeconds,8);
+ assert.equal(plan.triggerDistanceNm,5.5);
+ assert.equal(plan.rampSeconds,25);
  assert.throws(()=>scenarioProfile('not-a-scenario'));
 });
 test('wind interpolation takes the short circular turn and scoring uses actual aircraft wind',()=>{
@@ -18,6 +18,7 @@ test('wind interpolation takes the short circular turn and scoring uses actual a
  assert.ok(components.headwindKts<0&&components.crosswindKts<0);
  assert.equal(windDelivered({directionDeg:181,speedKts:16},{directionDeg:299,speedKts:8},{directionDeg:179,speedKts:17}),true);
  assert.equal(windDelivered({directionDeg:299,speedKts:8},{directionDeg:299,speedKts:8},{directionDeg:179,speedKts:17}),false);
+ assert.equal(windDelivered({directionDeg:355,speedKts:21.6},{directionDeg:119,speedKts:8},{directionDeg:324,speedKts:25}),false);
 });
 test('only lower weather layers change and the original settings can be restored',async()=>{
  assert.deepEqual(changedWindLayers([0,1000,4000],[1,2,3],7,30),[7,7,3]);

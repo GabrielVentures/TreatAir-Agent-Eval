@@ -698,8 +698,12 @@ async function advanceWeatherScenario(s,profile){
   await setWind(api,state().weatherBackup,requested,state().nav.elevationFt);
   event={...event,lastStep:step,requested,finalRequestedSimTime:step===plan.steps?s.simTime:event.finalRequestedSimTime};
   update({weatherEvent:event});log('events',{...stamp(s.simTime),type:'weather_ramp_step',step,requested,measured:{directionDeg:s.effectiveWindDirectionDeg,speedKts:s.effectiveWindSpeedKts}});
+  // This sample predates the write. Verify delivery from a later aircraft
+  // observation, never from the wind measured before the final ramp step.
+  if(step===plan.steps)return;
  }
  if(event.lastStep!==plan.steps)return;
+ if(s.simTime<=event.finalRequestedSimTime)return;
  const measured={directionDeg:s.effectiveWindDirectionDeg,speedKts:s.effectiveWindSpeedKts};
  if(windDelivered(measured,plan.baseline,plan.target)){
   const sequence=(state().scenarioMessageSequence||0)+1;
