@@ -51,7 +51,7 @@ The repository includes sanitized sample outcomes in [examples](examples) and th
 
 ## Current status
 
-The accepted runway-change experiment set contains **5 Sol completions in 5 included trials** and **1 Luna completion in 5 included trials**. Sol has **6 recorded attempts overall: 5 completions and 1 decision-limit failure excluded and replaced during development**. Earlier successful Sol runs were retained across environment repairs, so these are descriptive development results, not a fixed-version statistical comparison. See the [evaluation report](docs/EVALUATION.md) for individual runs and exclusions.
+In the selected runway-change runs, Sol completed **5 of 5** missions and Luna completed **1 of 5**. These exploratory results illustrate the evaluation workflow; the small, selected sample is not a reliability estimate. See the [evaluation report](docs/EVALUATION.md) for results and limitations.
 
 This is a proof of concept, not a certified flight system. The demonstrated scenario is intentionally narrow. Recent no-reasoning API trials completed the task with both Sol and Luna under some runs, while Luna also showed repeated decision-limit and rollout failures. The evidence is useful for studying agent reliability and tool design, not for claiming production autonomy.
 
