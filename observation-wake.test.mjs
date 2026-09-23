@@ -14,3 +14,8 @@ test('small fluctuations do not wake; worsening deviations and speed changes do'
  assert.deepEqual(wake(base,next({iasKts:149})),['airspeed_changed_10kt']);
  assert.deepEqual(wake({...base,state:{...base.state,localizerDots:2}},next({localizerDots:1})),[]);
 });
+test('weather changes and higher stabilization gates wake a waiting model',()=>{
+ const before={...base,state:{...base.state,radioAltitudeFt:1100,effectiveWindSpeedKts:8,effectiveWindDirectionDeg:299}};
+ const after={...before,state:{...before.state,simTime:2,radioAltitudeFt:990,effectiveWindSpeedKts:15,effectiveWindDirectionDeg:180}};
+ assert.deepEqual(wake(before,after),['wind_speed_changed_5kt','wind_direction_changed_30deg','descending_through_1000ft']);
+});

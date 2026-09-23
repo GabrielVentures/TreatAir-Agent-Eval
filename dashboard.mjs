@@ -8,6 +8,7 @@ import crypto from 'node:crypto';
 import {spawn,execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {configureInstallation,installationSummary,loadConfig} from './installation.mjs';
+import {SCENARIOS,scenarioProfile} from './scenario-profiles.mjs';
 
 const HERE=path.dirname(fileURLToPath(import.meta.url));
 const DASH=path.join(HERE,'dashboard');
@@ -23,6 +24,8 @@ const models=[
  {id:'gpt-5.6-sol',label:'GPT-5.6 Sol',reasoning:['none','low','medium','high','max'],estimate:'~$1.60 / 80 decisions'},
  {id:'gpt-5.6-terra',label:'GPT-5.6 Terra',reasoning:['none','low','medium','high','max'],estimate:'~$0.81 / 80 decisions'},
  {id:'gpt-5.6-luna',label:'GPT-5.6 Luna',reasoning:['none','low','medium','high','max'],estimate:'~$0.12 / 80 decisions'},
+ {id:'gpt-6-sol',label:'GPT-6 Sol',reasoning:['none','low','medium','high','xhigh','max'],estimate:'~$0.45 / 80 decisions'},
+ {id:'gpt-6-luna',label:'GPT-6 Luna',reasoning:['none','low','medium','high','xhigh','max'],estimate:'~$0.03 / 80 decisions'},
  {id:'gpt-6-astra',label:'GPT-6 Astra',reasoning:['low','medium','high','xhigh','max'],estimate:'likely >$3 / 80 decisions',requiresConfirmation:true}
 ];
 const contextDir=path.join(ROOT,'dashboard-context');
@@ -38,13 +41,13 @@ const safeRun=run=>typeof run==='string'&&path.resolve(run).startsWith(path.reso
 function jsonRows(file){try{return fs.readFileSync(file,'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);}catch{return [];}}
 function tailRows(run,name,limit=80){return run?jsonRows(path.join(run,name)).slice(-limit):[];}
 function compactDecision(row){return {step:row.step,simTime:row.latestBeforeExecution?.state?.simTime??row.observation?.state?.simTime,wallTime:row.wallTime,model:row.model,reasoning:row.reasoning,latencyMs:row.inferenceLatencyMs,assessment:row.decision?.assessment,actions:row.decision?.actions||[],results:(row.results||[]).map(x=>({requested:x.requested,accepted:x.accepted,outcome:x.outcome})),discardedFor:row.discardedFor||[],done:row.decision?.done};}
-function compactTelemetry(row){if(!row)return null;return {simTime:row.simTime,wallTime:row.wallTime,altitudeFt:Number.isFinite(row.altMslM)?Math.round(row.altMslM/.3048):null,aglFt:Number.isFinite(row.aglM)?Math.round(row.aglM/.3048):null,iasKts:row.iasKts,groundSpeedMps:row.groundSpeedMps,headingTrue:row.headingTrue,headingTarget:row.headingTarget,speedTarget:row.speedTarget,altTarget:row.altTarget,vsiFpm:row.vsiFpm,bank:row.bank,pitch:row.pitch,onGround:row.onGround,hasCrashed:row.hasCrashed,ap1:row.ap1,ap2:row.ap2,athrOn:row.athrOn,navMode:row.navMode,gsMode:row.gsMode,headingMode:row.headingMode,verticalMode:row.verticalMode,flaps:row.flaps,flapsActual:row.flapsActual,gear:row.gear,spoilers:row.spoilers,fuelKg:row.fuelKg,warning:row.warning,caution:row.caution,stall:row.stall,overspeed:row.overspeed,windDirectionDeg:row.windDirectionDeg,windSpeedKts:row.windSpeedKts,track:row.track,runwayFootprint:row.runwayFootprint,runwayExcursion:row.runwayExcursion};}
+function compactTelemetry(row){if(!row)return null;return {simTime:row.simTime,wallTime:row.wallTime,altitudeFt:Number.isFinite(row.altMslM)?Math.round(row.altMslM/.3048):null,aglFt:Number.isFinite(row.aglM)?Math.round(row.aglM/.3048):null,iasKts:row.iasKts,groundSpeedMps:row.groundSpeedMps,headingTrue:row.headingTrue,headingTarget:row.headingTarget,speedTarget:row.speedTarget,altTarget:row.altTarget,vsiFpm:row.vsiFpm,bank:row.bank,pitch:row.pitch,onGround:row.onGround,hasCrashed:row.hasCrashed,ap1:row.ap1,ap2:row.ap2,athrOn:row.athrOn,navMode:row.navMode,gsMode:row.gsMode,headingMode:row.headingMode,verticalMode:row.verticalMode,flaps:row.flaps,flapsActual:row.flapsActual,gear:row.gear,spoilers:row.spoilers,fuelKg:row.fuelKg,warning:row.warning,caution:row.caution,stall:row.stall,overspeed:row.overspeed,effectiveWindDirectionDeg:row.effectiveWindDirectionDeg,effectiveWindSpeedKts:row.effectiveWindSpeedKts,track:row.track,runwayFootprint:row.runwayFootprint,runwayExcursion:row.runwayExcursion};}
 function stateSnapshot(){
  const operator=readJson(path.join(ROOT,'operator.json'))||{};
  const run=safeRun(operator.run),telemetry=tailRows(run,'telemetry.jsonl',120),decisionRows=run?jsonRows(path.join(run,'model-decisions.jsonl')):[],decisions=decisionRows.slice(-40).map(compactDecision),actions=tailRows(run,'agent-actions.jsonl',100),events=tailRows(run,'events.jsonl',50),recordedMessages=tailRows(run,'messages.jsonl',50);
  const messages=[...recordedMessages,...(operator.lastMessages||[]),...(operator.scenarioMessages||[])].sort((a,b)=>(a.simTime??0)-(b.simTime??0)||(a.sequence??0)-(b.sequence??0));
  const uniqueMessages=[...new Map(messages.map(m=>[m.id||`${m.text}:${m.wallTime}`,m])).values()].slice(-30);
- return {serverTime:new Date().toISOString(),operator:{phase:operator.phase,ready:operator.ready,outcome:operator.outcome,run,activeRunway:operator.activeRunway,setupFailure:operator.setupFailure,setupProgress:operator.setupProgress,mission:operator.mission,event:operator.event,atc:operator.atc,landingHelper:operator.landingHelper},runner:readJson(path.join(ROOT,'dashboard-runner.json')),job:readJson(path.join(ROOT,'dashboard-job.json')),telemetry:telemetry.map(compactTelemetry),decisionTotal:decisionRows.length,decisions,actions:actions.slice(-50),events,messages:uniqueMessages,result:run?readJson(path.join(run,'result.json')):null};
+ return {serverTime:new Date().toISOString(),operator:{phase:operator.phase,ready:operator.ready,outcome:operator.outcome,run,scenarioId:operator.scenarioId,weatherEvent:operator.weatherEvent,activeRunway:operator.activeRunway,setupFailure:operator.setupFailure,setupProgress:operator.setupProgress,mission:operator.mission,event:operator.event,atc:operator.atc,landingHelper:operator.landingHelper},runner:readJson(path.join(ROOT,'dashboard-runner.json')),job:readJson(path.join(ROOT,'dashboard-job.json')),telemetry:telemetry.map(compactTelemetry),decisionTotal:decisionRows.length,decisions,actions:actions.slice(-50),events,messages:uniqueMessages,result:run?readJson(path.join(run,'result.json')):null};
 }
 function listSituations(){if(!CFG.simRoot)return [];const dir=path.join(CFG.simRoot,'Output','situations');if(!fs.existsSync(dir))return [];return fs.readdirSync(dir).filter(name=>name.endsWith('.sit')).sort().map(name=>({name,path:path.join(dir,name),modifiedAt:fs.statSync(path.join(dir,name)).mtime.toISOString()}));}
 function contextCatalog(){const raw=readJson(contextCatalogFile);return Array.isArray(raw?.sources)?raw.sources:[];}
@@ -58,7 +61,20 @@ function requireLocalControl(req){
  if(!origin||!dashboardOrigins.has(origin))throw Error('Control requests must originate from this local dashboard.');
  if(req.headers['x-flight-control-token']!==csrfToken)throw Error('Missing or invalid local control token. Refresh the dashboard and retry.');
 }
-function evaluationBusy(){const snapshot=stateSnapshot();return snapshot.operator.phase==='EVALUATING'||['starting','running'].includes(snapshot.runner?.status)||snapshot.job?.status==='running';}
+function processAlive(pid){if(!Number.isInteger(pid)||pid<=0)return false;try{process.kill(pid,0);return true;}catch{return false;}}
+function recoverAbortedEvaluation(){
+ const runner=readJson(path.join(ROOT,'dashboard-runner.json'))||{};
+ const operator=readJson(operatorFile)||{};
+ if(operator.phase!=='EVALUATING'||['starting','running'].includes(runner.status)||processAlive(runner.scenarioPid))return;
+ const lock=path.join(ROOT,'evaluation.lock');
+ if(fs.existsSync(lock)){
+  const owner=Number(fs.readFileSync(lock,'utf8').trim());
+  if(processAlive(owner))return;
+  fs.unlinkSync(lock);
+ }
+ writeJson(operatorFile,{...operator,phase:'FINISHED',ready:false,outcome:'operator_stopped',setupFailure:null});
+}
+function evaluationBusy(){recoverAbortedEvaluation();const snapshot=stateSnapshot();return snapshot.operator.phase==='EVALUATING'||['starting','running'].includes(snapshot.runner?.status)||snapshot.job?.status==='running';}
 function safeName(name){const out=String(name||'context').replace(/[^a-zA-Z0-9._-]/g,'_').replace(/^\.+/,'');if(!out)return 'context.txt';return out;}
 function updateOperator(patch){writeJson(operatorFile,{...(readJson(operatorFile)||{}),...patch});}
 function keychainApiKeyAvailable(){
@@ -131,10 +147,10 @@ function runConfig(input){
  fs.writeFileSync(guidanceFile,prompt,{mode:0o600});writeJson(contextManifestFile,{sources});
  const maxDecisions=Number(input.maxDecisions??80);
  if(!Number.isSafeInteger(maxDecisions)||maxDecisions<1)throw Error('Decision limit must be a positive whole number.');
- return {backend:'api',model:model.id,reasoning:input.reasoning,maxDecisions,guidanceFile,contextManifestFile,contextNames:sources.map(x=>x.name)};
+ return {backend:'api',model:model.id,reasoning:input.reasoning,maxDecisions,scenarioId:scenarioProfile(input.scenarioId).id,guidanceFile,contextManifestFile,contextNames:sources.map(x=>x.name)};
 }
 async function api(req,res,url){
- if(req.method==='GET'&&url.pathname==='/api/catalog')return send(res,200,{models,situations:listSituations(),recommendedSituation:CFG.simRoot?path.join(CFG.simRoot,CFG.situation):null,contexts:listContext(),defaultPrompt:defaultGuidance(),installation:installationSummary(CFG),credentials:credentialSummary(),csrfToken});
+ if(req.method==='GET'&&url.pathname==='/api/catalog')return send(res,200,{models,scenarios:Object.values(SCENARIOS).map(({id,label,description})=>({id,label,description})),situations:listSituations(),recommendedSituation:CFG.simRoot?path.join(CFG.simRoot,CFG.situation):null,contexts:listContext(),defaultPrompt:defaultGuidance(),installation:installationSummary(CFG),credentials:credentialSummary(),csrfToken});
  if(req.method==='GET'&&url.pathname==='/api/snapshot')return send(res,200,stateSnapshot());
  if(req.method==='GET'&&url.pathname==='/api/readiness')return send(res,200,liveReadiness());
  if(req.method==='GET'&&url.pathname==='/api/report'){
@@ -174,28 +190,38 @@ async function api(req,res,url){
  if(req.method==='POST'&&url.pathname==='/api/setup'){
   requireLocalControl(req);if(evaluationBusy())throw Error('Cannot load a situation while setup or an evaluation is active.');
   const installation=installationSummary(CFG);if(!installation.automaticLoadAvailable)throw Error(`Automatic situation loading is unavailable: situation ${installation.assets?.situation?.status||'missing'}, loader ${installation.assets?.loader?.status||'missing'}. Load the saved flight in X-Plane, then choose Use current flight.`);
-  const input=await body(req);const situations=listSituations(),found=situations.find(x=>x.path===input.situation);if(!found)throw Error('Select a situation from the catalog.');
+  const input=await body(req);const profile=scenarioProfile(input.scenarioId);const situations=listSituations(),found=situations.find(x=>x.path===input.situation);if(!found)throw Error('Select a situation from the catalog.');
   const launch=launchXPlane(found.path);
-  return send(res,202,{accepted:true,launch,job:startJob('setup',['scenario.mjs','setup','--sit',found.path,'--watch-xplane-process'])});
+  return send(res,202,{accepted:true,launch,job:startJob('setup',['scenario.mjs','setup','--sit',found.path,'--scenario',profile.id,'--watch-xplane-process'])});
  }
  if(req.method==='POST'&&url.pathname==='/api/prepare-loaded'){
   requireLocalControl(req);if(evaluationBusy())throw Error('Cannot prepare a situation while setup or an evaluation is active.');
   const installation=installationSummary(CFG);if(!installation.manualLoadAvailable)throw Error('Configure a valid X-Plane installation and install the bundled situation first.');
-  return send(res,202,{accepted:true,job:startJob('prepare-loaded',['scenario.mjs','setup','--reuse-loaded','--watch-xplane-process'])});
+  const profile=scenarioProfile((await body(req)).scenarioId);
+  return send(res,202,{accepted:true,job:startJob('prepare-loaded',['scenario.mjs','setup','--reuse-loaded','--scenario',profile.id,'--watch-xplane-process'])});
  }
  if(req.method==='POST'&&url.pathname==='/api/run'){
   requireLocalControl(req);
   const prior=readJson(path.join(ROOT,'dashboard-runner.json'));if(['starting','running'].includes(prior?.status))throw Error('An evaluation is already running. Stop it or wait for it to finish.');
   const readiness=liveReadiness(true);if(!readiness.ready||!readiness.paused)throw Error(`Evaluation is locked: ${readiness.checks.join('; ')||readiness.message}`);
   if(!credentialSummary().configured)throw Error('Add an OpenAI API key in Settings before starting an evaluation.');
-  const config=runConfig(await body(req)),file=path.join(ROOT,'dashboard-run-config.json');writeJson(file,config);
+  const config=runConfig(await body(req));if(config.scenarioId!==(readJson(operatorFile)||{}).scenarioId)throw Error('Selected scenario differs from the prepared flight. Prepare the aircraft again.');const file=path.join(ROOT,'dashboard-run-config.json');writeJson(file,config);
   const child=spawn(process.execPath,['dashboard-runner.mjs',file],{cwd:HERE,detached:true,stdio:'ignore',env:{...process.env,...(dashboardApiKey?{OPENAI_API_KEY:dashboardApiKey}:{})}});child.unref();return send(res,202,{accepted:true,pid:child.pid,model:config.model,reasoning:config.reasoning});
  }
  if(req.method==='POST'&&url.pathname==='/api/stop'){
   requireLocalControl(req);
   const setupCancelled=cancelSetup();
-  const runner=readJson(path.join(ROOT,'dashboard-runner.json'))||{};for(const pid of [runner.agentPid,runner.scenarioPid]){if(Number.isInteger(pid))try{process.kill(pid,'SIGTERM');}catch{}}
-  const pausePid=requestPause();return send(res,202,{accepted:true,setupCancelled,pausePid});
+  const runner=readJson(path.join(ROOT,'dashboard-runner.json'))||{};
+  const access=readJson(path.join(ROOT,'agent-access.json'));
+  if(runner.status==='running'&&processAlive(runner.scenarioPid)&&access?.url&&access?.token){
+   try{
+    const response=await fetch(new URL('/finish',access.url),{method:'POST',headers:{Authorization:`Bearer ${access.token}`,'Content-Type':'application/json'},body:JSON.stringify({reason:'operator_stopped'}),signal:AbortSignal.timeout(3000)});
+    if(response.ok)return send(res,202,{accepted:true,setupCancelled,gracefulStop:true});
+   }catch{}
+  }
+  if(processAlive(runner.agentPid))try{process.kill(runner.agentPid,'SIGTERM');}catch{}
+  else if(processAlive(runner.scenarioPid))try{process.kill(runner.scenarioPid,'SIGTERM');}catch{}
+  const pausePid=requestPause();return send(res,202,{accepted:true,setupCancelled,pausePid,gracefulStop:false});
  }
  return false;
 }

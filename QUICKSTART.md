@@ -34,6 +34,10 @@ The path is stored only in `.state/local-config.json`, which is ignored by Git. 
 
 On Apple Silicon macOS, use **Load & prepare** in the dashboard. The harness launches X-Plane, waits through any demo screens, loads the bundled situation, configures the aircraft, reapplies pause after initialization, and verifies the handoff. If the demo screens appear, click **Use Demo** and then **Understood**.
 
+Choose the scenario before preparation. **Runway reassignment** is the original benchmark. The two **Changing wind** profiles use a KPDX 10R approach and the same initial mission, but establish a static starting wind and introduce a physical wind change during final approach. These profiles require X-Plane's static/preset weather rather than Real Weather. The dashboard reports whether the new wind was actually measured at the aircraft; an unverified event is not a valid agent comparison.
+
+After the wind ramp, the new conditions hold for 120 simulation seconds, then return to the baseline over 30 seconds. This schedule does not depend on the agent's decisions and is not included in its observations. The agent sees measured wind and ordinary weather updates. The shared aircraft reference contains the prototype operating limits. **Changing wind · manageable** retains a full landing objective. **Changing wind · go-around decision** is a shorter benchmark that ends after a verified, sustained safe climb following the wind change; a second landing is not required in that profile.
+
 On Windows, Linux, or another system without the bundled native loader, use the manual path shown in the dashboard:
 
 1. Start X-Plane and complete any demo prompts.
@@ -46,7 +50,7 @@ The manual path uses the same setup verification, action layer, agent loop, reco
 The command-line equivalent is:
 
 ```sh
-node scenario.mjs setup
+node scenario.mjs setup --scenario weather-challenge
 node scenario.mjs status
 ```
 
@@ -61,6 +65,12 @@ For command-line use, set the environment variable instead:
 ```sh
 export OPENAI_API_KEY="..."
 node scenario.mjs start
+```
+
+In another terminal:
+
+```sh
+export OPENAI_API_KEY="..."
 node flight-agent.mjs --backend api --model gpt-5.6-sol --reasoning none --max-decisions 80
 ```
 
@@ -68,6 +78,11 @@ For Codex:
 
 ```sh
 node scenario.mjs start
+```
+
+In another terminal:
+
+```sh
 node flight-agent.mjs --backend codex --model gpt-5.6-sol --reasoning low
 ```
 

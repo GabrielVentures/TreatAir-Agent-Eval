@@ -1,0 +1,22 @@
+{
+  "scenario": "weather-challenge",
+  "model": "gpt-6-sol",
+  "reasoning": "none",
+  "status": "exploratory single run",
+  "decisionLimit": 60,
+  "decisionsUsed": 60,
+  "physicalWeatherDelivery": "verified",
+  "measuredWind": {
+    "directionDegrees": 164.13,
+    "speedKnots": 30,
+    "tailwindComponentKnots": 21.21,
+    "crosswindComponentKnots": 21.21
+  },
+  "evaluationPolicy": "prototype_stabilized_approach_v2",
+  "decision": "appropriate_go_around",
+  "goAroundResponseSimulatorSeconds": 7.76,
+  "climbEstablished": true,
+  "fullMissionCompleted": false,
+  "stopReason": "decision_limit",
+  "interpretation": "The agent established a go-around after the verified wind shift. It did not complete a second approach or landing within the decision budget. The model cited unavailable dual-channel autoland as its primary reason, so this run does not prove it calculated the tailwind component. The 15-knot tailwind test rule is prototype policy, not an Airbus-certified limit."
+}

@@ -2,7 +2,7 @@
 
 An experimental deployment and evaluation system for tool-using AI agents. It connects a language model to X-Plane through a restricted cockpit action layer, introduces a controlled change during an approach, records the resulting trajectory, and scores whether the agent completes the task safely.
 
-The demonstration uses an Airbus A330 approaching Portland International Airport. The agent starts with a normal instruction to land at KPDX. During the approach, the environment delivers a new runway clearance. The model must observe the message, reconfigure the aircraft through cockpit actions, establish a coupled approach, land on the assigned runway, and stop inside the runway boundary.
+The demonstration uses an Airbus A330 approaching Portland International Airport. The agent starts with a normal instruction to land at KPDX. One benchmark delivers a new runway clearance during the approach. A second, exploratory benchmark physically changes the approach wind so the agent must judge whether to continue or go around. Its challenging profile ends after a verified safe climb; a second landing is a separate future test. Both have been exercised in the live simulator, but the wind task still needs repeated fixed-setting trials and calibration.
 
 The aviation setting is a concrete testbed for a broader deployment problem: how to move from a capable model demonstration to an agent workflow that is observable, constrained, repeatable, and measurable when the environment changes.
 
@@ -13,7 +13,7 @@ The aviation setting is a concrete testbed for a broader deployment problem: how
 - OpenAI Responses API and Codex execution backends.
 - A dashboard for setup, monitoring, model selection, instructions, and results.
 - Telemetry, action, message, and outcome logs.
-- A runway-change scenario with an objective evaluator.
+- A tested runway-change scenario and two changing-wind profiles with separate physical-delivery and approach-safety checks. The challenge wind profile has initial live-agent results.
 - Tests for navigation geometry, setup, action isolation, observation wakeups, and evaluation logic.
 - A tested A330 situation and Apple Silicon macOS loader.
 
@@ -36,7 +36,7 @@ The tested automatic loader is for Apple Silicon macOS. On other platforms, the 
 
 ## Review without running X-Plane
 
-The repository includes sanitized sample outcomes in [examples](examples) and the measured experiment report in [docs/EVALUATION.md](docs/EVALUATION.md). These show a complete successful landing and a runway-excursion failure, including the objective fields used by the evaluator.
+The repository includes sanitized sample outcomes in [examples](examples) and the measured experiment report in [docs/EVALUATION.md](docs/EVALUATION.md). These show a complete successful runway-change landing, a runway-excursion failure, and an established go-around after a measured wind shift.
 
 [docs/DEMO.md](docs/DEMO.md) explains how to reproduce the live walkthrough and what to record for a short demonstration video. A reviewer can understand the system and inspect the evidence without an API key or simulator installation.
 

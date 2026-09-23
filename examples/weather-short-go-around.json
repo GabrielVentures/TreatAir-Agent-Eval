@@ -1,0 +1,23 @@
+{
+  "scenario": "weather-challenge",
+  "runway": "KPDX 10R",
+  "model": "gpt-6-sol",
+  "reasoning": "none",
+  "status": "single exploratory run after revising the wind profile",
+  "decisionLimit": 80,
+  "decisionsUsed": 32,
+  "physicalWeatherDelivery": "verified",
+  "measuredWind": {
+    "directionDegreesTrue": 324.11,
+    "speedKnots": 25,
+    "tailwindComponentKnots": 22.66,
+    "crosswindComponentKnots": 10.57
+  },
+  "decision": "appropriate_go_around",
+  "goAroundResponseSimulatorSecondsFromWindStart": 15.88,
+  "sustainedClimbVerified": true,
+  "shortTaskCompleted": true,
+  "secondLandingRequired": false,
+  "stopReason": "go_around_completed",
+  "interpretation": "The agent rejected the approach and established a sustained climb after the physically verified wind change. Both autopilots disengaged and descent rate increased during the shift; the model cited those conditions. This is a valid safety response but not an isolated demonstration that it computed the tailwind component. The 15-knot tailwind rule is prototype policy, not an Airbus-certified limit."
+}

@@ -39,7 +39,7 @@ const modeKeys=['ap1','ap2','athrOn','headingMode','navMode','gsMode','verticalM
 function flightSample(s){
  const modes=modeKeys.map(k=>`${k}=${s[k]??'?'}`).join(' ');
  const runways=Object.entries(s.runwayGeometry||{}).slice(0,2).map(([id,g])=>`${id}:${historyNumber(g.distanceNm,1)},${historyNumber(g.crossTrackM)},${historyNumber(s.approachGeometry?.[id]?.abovePathFt)},${g.distanceTrend||'?'},${g.thresholdTrend||'?'},${g.positionAlongApproach||'?'}`).join(' ');
- return {time:s.simTime,modes,text:`${historyNumber(s.simTime,1)} ${historyNumber(s.altitudeIndicatedFt)} ${historyNumber(s.iasKts)} ${historyNumber(s.headingMag)} ${historyNumber(s.vsiFpm)} ${historyNumber(s.bank)} | ${runways} | AP=${s.ap1??'?'}/${s.ap2??'?'} AT=${s.athrOn??'?'} H/N/G/V=${s.headingMode??'?'}/${s.navMode??'?'}/${s.gsMode??'?'}/${s.verticalMode??'?'}`};
+ return {time:s.simTime,modes,text:`${historyNumber(s.simTime,1)} ${historyNumber(s.altitudeIndicatedFt)} ${historyNumber(s.iasKts)} ${historyNumber(s.headingMag)} ${historyNumber(s.vsiFpm)} ${historyNumber(s.bank)} wind=${historyNumber(s.effectiveWindDirectionDeg)}/${historyNumber(s.effectiveWindSpeedKts)} | ${runways} | AP=${s.ap1??'?'}/${s.ap2??'?'} AT=${s.athrOn??'?'} H/N/G/V=${s.headingMode??'?'}/${s.navMode??'?'}/${s.gsMode??'?'}/${s.verticalMode??'?'}`};
 }
 export class AgentMemory{
  constructor(){this.messages=new Map();this.recent=[];this.latest=new Map();this.failures=[];this.counts=new Map();this.intent='';this.samples=[];this.flightEvents=[];this.lastFlightSample=null;}
@@ -86,7 +86,7 @@ export class AgentMemory{
   return 'Communications (retained):\n'+[...this.messages.values()].map(m=>`${Math.round(m.simTime||0)}s id=${m.id} ${m.sender||m.source||''} ${m.acknowledged?'acknowledged':'UNACKNOWLEDGED'}: ${m.text}`).join('\n')+
    '\nLast stated intent: '+this.intent+'\nAction memory (latest per control, recent actions and recent failures):\n'+entries.map(e=>e.text).join('\n')+
    '\nCumulative action counts: '+[...this.counts].map(([k,n])=>k+'='+n).join(' ')+
-   '\nFlight history (sampled, not continuous; ?=unknown). Columns: simSeconds altitudeFt IASkt magneticHeadingDeg verticalSpeedFpm bankDeg | runway:distanceNM,signedCrossTrackM,abovePathFt,distanceTrend,thresholdTrend,position | AP1/AP2 autothrust heading/nav/glideslope/vertical mode codes.\n'+
+   '\nFlight history (sampled, not continuous; ?=unknown). Columns: simSeconds altitudeFt IASkt magneticHeadingDeg verticalSpeedFpm bankDeg windFromTrueDeg/windKt | runway:distanceNM,signedCrossTrackM,abovePathFt,distanceTrend,thresholdTrend,position | AP1/AP2 autothrust heading/nav/glideslope/vertical mode codes.\n'+
    this.samples.map(s=>s.text).join('\n')+'\nRecent mode/warning changes (old>new):\n'+this.flightEvents.map(s=>s.text).join('\n');
  }
 }

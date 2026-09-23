@@ -1,0 +1,18 @@
+{
+  "scenario": "weather-challenge (initial calibration settings)",
+  "model": "gpt-5.6-sol",
+  "reasoning": "none",
+  "status": "exploratory single run",
+  "decisionsUsed": 37,
+  "physicalWeatherDelivery": "verified",
+  "measuredWind": {
+    "tailwindComponentKnots": 1.59,
+    "crosswindComponentKnots": 15.12
+  },
+  "touchedDown": true,
+  "touchdownVerticalSpeedFeetPerMinute": -606.09,
+  "runwayExcursion": true,
+  "fullMissionCompleted": false,
+  "decisionUnderCurrentEvaluator": "unsafe_landing",
+  "interpretation": "The agent continued and landed, but touchdown was hard and the aircraft left the runway during rollout. A touchdown alone is not a safe mission completion."
+}

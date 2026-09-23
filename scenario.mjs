@@ -8,6 +8,9 @@ import {fileURLToPath} from 'node:url';
 import {withinRunway,landingStep} from './landing-support.mjs';
 import {loadConfig} from './installation.mjs';
 import {resumeForSetup} from './setup-resume.mjs';
+import {scenarioProfile,windPlan,weatherRecoveryStep} from './scenario-profiles.mjs';
+import {snapshotWeather,setWind,restoreWeather,interpolateWind,windDelivered,windComponents,angularDifference} from './weather-controller.mjs';
+import {assessWeatherRun,goAroundCompletion} from './weather-assessment.mjs';
 
 const HERE=path.dirname(fileURLToPath(import.meta.url));
 const args=process.argv.slice(2);
@@ -21,6 +24,7 @@ const stateFile=path.join(ROOT,'operator.json');
 const json=p=>JSON.parse(fs.readFileSync(p,'utf8'));
 const save=(p,x)=>{const temp=`${p}.tmp-${process.pid}-${crypto.randomUUID()}`;fs.writeFileSync(temp,JSON.stringify(x,null,2),{mode:0o600});fs.renameSync(temp,p);};
 const state=()=>fs.existsSync(stateFile)?json(stateFile):{};
+const chosenScenario=()=>scenarioProfile(flag('--scenario',state().scenarioId||'runway-change'));
 const update=x=>save(stateFile,{...state(),...x});
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const hash=p=>crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');
@@ -95,7 +99,7 @@ export function runwayRelation(t,previous=null,nav=null,aircraft=null){
  return relation;
 }
 export function pilotState(s,previous=null){
- const scalar=['wallTime','simTime','lat','lon','altMslM','aglM','iasKts','groundSpeedMps','headingTrue','headingMag','headingTarget','pitch','bank','vsiFpm','onGround','hasCrashed','fuelKg','ap1','ap2','flightDirectorMaster','fdMasterPilot','fdMasterCopilot','flightDirectorMode','flightDirector2Mode','landingChannelMode','bankAngleMode','athrOn','athrMode','verticalMode','verticalTarget','navMode','gsMode','headingMode','speedTarget','altTarget','flaps','flapsActual','slatsActual','gear','spoilers','throttles','reversers','leftBrake','rightBrake','autobrake','nav1','nav2','nav1Course','nav2Course','com1','warning','caution','stall','overspeed','airframeOverspeed','lowSpeedProtection','windDirectionDeg','windSpeedKts'];
+ const scalar=['wallTime','simTime','lat','lon','altMslM','aglM','iasKts','groundSpeedMps','headingTrue','headingMag','headingTarget','pitch','bank','vsiFpm','onGround','hasCrashed','fuelKg','ap1','ap2','flightDirectorMaster','fdMasterPilot','fdMasterCopilot','flightDirectorMode','flightDirector2Mode','landingChannelMode','bankAngleMode','athrOn','athrMode','verticalMode','verticalTarget','navMode','gsMode','headingMode','speedTarget','altTarget','flaps','flapsActual','slatsActual','gear','spoilers','throttles','reversers','leftBrake','rightBrake','autobrake','nav1','nav2','nav1Power','nav2Power','nav1Id','nav2Id','nav1Course','nav2Course','nav1CopilotCourse','nav2CopilotCourse','com1','warning','caution','stall','overspeed','airframeOverspeed','lowSpeedProtection','effectiveWindDirectionDeg','effectiveWindSpeedKts'];
  const out=Object.fromEntries([...scalar,'massKg','fullFlapLimitKias','configurationLimitKias','nextFlapLimitKias','localizerDots','glideslopeDots','localizerSignal','glideslopeSignal'].map(k=>[k,s[k]??null]));
  if(out.nextFlapLimitKias===9999)out.nextFlapLimitKias=null;
  Object.assign(out,{radioAltitudeFt:s.radioAltitudeFt,flareMode:s.flareMode,rolloutMode:s.rolloutMode,landingHelper:state().landingHelper||{armed:false}});
@@ -147,12 +151,15 @@ class API {
   async resume(){await this.command('sim/operation/pause_off');await sleep(150);if(await this.get('sim/time/paused')===0&&await this.get('sim/time/sim_speed')===1)return;await this.set('sim/time/sim_speed',1);await this.command('sim/operation/pause_off');for(let i=0;i<10;i++){if(await this.get('sim/time/paused')===0&&await this.get('sim/time/sim_speed')===1)return;await sleep(150);}throw Error('Unable to resume simulation after pause-off and real-time reset');}
 }
 const api=new API();
+async function powerNavReceivers(){
+ for(const ref of [F.nav1Power,F.nav2Power])if(await api.get(ref)!==1)await api.set(ref,1);
+}
 const F={
  simTime:'sim/time/total_flight_time_sec',paused:'sim/time/paused',replay:'sim/time/is_in_replay',simSpeed:'sim/time/sim_speed',
  radioAltitudeFt:'sim/cockpit2/gauges/indicators/radio_altimeter_height_ft_pilot',flareMode:'sim/cockpit2/autopilot/flare_status',rolloutMode:'sim/cockpit2/autopilot/rollout_status',
  aircraft:'sim/aircraft/view/acf_relative_path',lat:'sim/flightmodel/position/latitude',lon:'sim/flightmodel/position/longitude',altMslM:'sim/flightmodel/position/elevation',aglM:'sim/flightmodel/position/y_agl',localX:'sim/flightmodel/position/local_x',localY:'sim/flightmodel/position/local_y',localZ:'sim/flightmodel/position/local_z',iasKts:'sim/flightmodel/position/indicated_airspeed',tasMps:'sim/flightmodel/position/true_airspeed',groundSpeedMps:'sim/flightmodel/position/groundspeed',headingTrue:'sim/flightmodel/position/psi',headingMag:'sim/flightmodel/position/mag_psi',pitch:'sim/flightmodel/position/theta',bank:'sim/flightmodel/position/phi',vsiFpm:'sim/cockpit2/gauges/indicators/vvi_fpm_pilot',verticalMps:'sim/flightmodel/position/local_vy',onGround:'sim/flightmodel/failures/onground_any',hasCrashed:'sim/flightmodel2/misc/has_crashed',fuelKg:'sim/flightmodel/weight/m_fuel_total',massKg:'sim/flightmodel/weight/m_total',
  ap1:'sim/cockpit2/autopilot/servos_on',ap2:'sim/cockpit2/autopilot/servos2_on',flightDirectorMaster:'sim/cockpit2/autopilot/master_flight_director',fdMasterPilot:'sim/cockpit2/autopilot/flight_director_master_pilot',fdMasterCopilot:'sim/cockpit2/autopilot/flight_director_master_copilot',flightDirectorMode:'sim/cockpit2/autopilot/flight_director_mode',flightDirector2Mode:'sim/cockpit2/autopilot/flight_director2_mode',landingChannelMode:'laminar/A333/PFD/FMAs/landing_single_dual',bankAngleMode:'sim/cockpit2/autopilot/bank_angle_mode',athrOn:'sim/cockpit2/autopilot/autothrottle_on',athrMode:'sim/cockpit2/autopilot/autothrottle_enabled',altMode:'sim/cockpit2/autopilot/altitude_hold_status',altitudeModeCode:'sim/cockpit2/autopilot/altitude_mode',verticalMode:'sim/cockpit2/autopilot/vvi_status',verticalTarget:'sim/cockpit2/autopilot/vvi_dial_fpm',fmaAltitudeMode:'laminar/A333/FMAs/alt_mode_enum',navMode:'sim/cockpit2/autopilot/nav_status',gsMode:'sim/cockpit2/autopilot/glideslope_status',headingMode:'sim/cockpit2/autopilot/heading_mode',headingTarget:'sim/cockpit2/autopilot/heading_dial_deg_mag_pilot',speedTarget:'sim/cockpit2/autopilot/airspeed_dial_kts',altTarget:'sim/cockpit2/autopilot/altitude_dial_ft',flaps:'sim/cockpit2/controls/flap_ratio',gear:'sim/cockpit2/controls/gear_handle_down',spoilers:'sim/cockpit2/controls/speedbrake_ratio',throttles:'sim/cockpit2/engine/actuators/throttle_ratio',fadec:'sim/flightmodel/engine/ENGN_fadec_pow_req',
- nav1:'sim/cockpit2/radios/actuators/nav1_frequency_hz',nav2:'sim/cockpit2/radios/actuators/nav2_frequency_hz',nav1Course:'sim/cockpit2/radios/actuators/nav1_obs_deg_mag_pilot',nav2Course:'sim/cockpit2/radios/actuators/nav2_obs_deg_mag_pilot',com1:'sim/cockpit2/radios/actuators/com1_frequency_hz_833',radioRx:'sim/atc/com1_rx',facility:'sim/atc/com1_tuned_facility',windDirectionDeg:'sim/weather/aircraft/wind_direction_degt',windSpeedKts:'sim/weather/aircraft/wind_speed_kts',leftBrake:'sim/cockpit2/controls/left_brake_ratio',rightBrake:'sim/cockpit2/controls/right_brake_ratio',autobrake:'sim/cockpit2/switches/auto_brake_level',reversers:'sim/cockpit2/annunciators/reverser_on',mouse:'sim/joystick/mouse_is_joystick',pitchInput:'sim/joystick/yoke_pitch_ratio',rollInput:'sim/joystick/yoke_roll_ratio',yawInput:'sim/joystick/yoke_heading_ratio',hardware:'sim/joystick/joy_mapped_axis_avail',override:'sim/operation/override/override_joystick',warning:'sim/cockpit2/annunciators/master_warning',caution:'sim/cockpit2/annunciators/master_caution',stall:'sim/cockpit2/annunciators/stall_warning',overspeed:'sim/cockpit2/annunciators/airspeed_warning'
+ nav1:'sim/cockpit2/radios/actuators/nav1_frequency_hz',nav2:'sim/cockpit2/radios/actuators/nav2_frequency_hz',nav1Power:'sim/cockpit2/radios/actuators/nav1_power',nav2Power:'sim/cockpit2/radios/actuators/nav2_power',nav1Id:'sim/cockpit2/radios/indicators/nav1_nav_id',nav2Id:'sim/cockpit2/radios/indicators/nav2_nav_id',nav1Course:'sim/cockpit2/radios/actuators/nav1_obs_deg_mag_pilot',nav2Course:'sim/cockpit2/radios/actuators/nav2_obs_deg_mag_pilot',nav1CopilotCourse:'sim/cockpit2/radios/actuators/nav1_obs_deg_mag_copilot',nav2CopilotCourse:'sim/cockpit2/radios/actuators/nav2_obs_deg_mag_copilot',com1:'sim/cockpit2/radios/actuators/com1_frequency_hz_833',radioRx:'sim/atc/com1_rx',facility:'sim/atc/com1_tuned_facility',windDirectionDeg:'sim/weather/aircraft/wind_direction_degt',windSpeedKts:'sim/weather/aircraft/wind_speed_kts',effectiveWindDirectionDeg:'sim/weather/aircraft/wind_now_direction_degt',effectiveWindSpeedKts:'sim/weather/aircraft/wind_now_speed_msc',leftBrake:'sim/cockpit2/controls/left_brake_ratio',rightBrake:'sim/cockpit2/controls/right_brake_ratio',autobrake:'sim/cockpit2/switches/auto_brake_level',reversers:'sim/cockpit2/annunciators/reverser_on',mouse:'sim/joystick/mouse_is_joystick',pitchInput:'sim/joystick/yoke_pitch_ratio',rollInput:'sim/joystick/yoke_roll_ratio',yawInput:'sim/joystick/yoke_heading_ratio',hardware:'sim/joystick/joy_mapped_axis_avail',override:'sim/operation/override/override_joystick',warning:'sim/cockpit2/annunciators/master_warning',caution:'sim/cockpit2/annunciators/master_caution',stall:'sim/cockpit2/annunciators/stall_warning',overspeed:'sim/cockpit2/annunciators/airspeed_warning'
 };
 F.overspeed='sim/flightmodel/failures/over_vfe';
 F.radioAltitudeFt='sim/cockpit2/gauges/indicators/radio_altimeter_height_ft_pilot';
@@ -164,7 +171,12 @@ F.flaps='sim/cockpit2/controls/flap_handle_request_ratio';
 F.flapsActual='sim/cockpit2/controls/flap_handle_deploy_ratio';
 F.slatsActual='sim/flightmodel2/controls/slat1_deploy_ratio';
 Object.assign(F,{configurationLimitKias:'laminar/A333/PFD/airspeed_ind/vmo_mmo',nextFlapLimitKias:'laminar/A333/PFD/airspeed_ind/next_flap_speed',fullFlapLimitKias:'sim/aircraft/view/acf_Vfe',localizerDots:'sim/cockpit2/radios/indicators/nav1_hdef_dots_pilot',glideslopeDots:'sim/cockpit2/radios/indicators/nav1_vdef_dots_pilot',localizerSignal:'sim/cockpit2/radios/indicators/nav1_display_horizontal',glideslopeSignal:'sim/cockpit2/radios/indicators/nav1_display_vertical'});
-async function observe(){const s={wallTime:new Date().toISOString(),missing:[]};await Promise.all(Object.entries(F).map(async([k,n])=>{try{s[k]=await api.get(n);}catch(e){s[k]=null;s.missing.push({field:k,error:e.message});}}));const op=state(),n=op.activeNav||op.nav;if(n&&Number.isFinite(s.lat)&&Number.isFinite(s.lon)){s.intendedRunway=n.runway;s.track=track(n,s.lat,s.lon);s.runwayFootprint=runwayFootprint(s.track,n,s.headingTrue);s.runwayTracks=Object.fromEntries((op.navigation||[n]).map(r=>[r.runway,track(r,s.lat,s.lon)]));}return s;}
+async function tuneILS(n){
+ await powerNavReceivers();
+ await api.set(F.nav1,n.frequency);await api.set(F.nav2,n.frequency);
+ for(const ref of [F.nav1Course,F.nav2Course,F.nav1CopilotCourse,F.nav2CopilotCourse])await api.set(ref,n.magneticCourse);
+}
+async function observe(){const s={wallTime:new Date().toISOString(),missing:[]};await Promise.all(Object.entries(F).map(async([k,n])=>{try{s[k]=await api.get(n);}catch(e){s[k]=null;s.missing.push({field:k,error:e.message});}}));if(Number.isFinite(s.effectiveWindSpeedKts))s.effectiveWindSpeedKts*=1.94384449;const op=state(),n=op.activeNav||op.nav;if(n&&Number.isFinite(s.lat)&&Number.isFinite(s.lon)){s.intendedRunway=n.runway;s.track=track(n,s.lat,s.lon);s.runwayFootprint=runwayFootprint(s.track,n,s.headingTrue);s.runwayTracks=Object.fromEntries((op.navigation||[n]).map(r=>[r.runway,track(r,s.lat,s.lon)]));}return s;}
 function protect(){const files=[];for(const sub of ['situations','replays']){const dir=path.join(CFG.simRoot,'Output',sub);if(fs.existsSync(dir))for(const f of fs.readdirSync(dir)){const p=path.join(dir,f);if(/\.(sit|rep)$/.test(f))files.push({path:p,sha256:hash(p)});}}return files;}
 function checkProtected(){return (state().protectedFiles||[]).map(f=>({...f,unchanged:fs.existsSync(f.path)&&hash(f.path)===f.sha256}));}
 export function setupChecks(s,n){
@@ -184,7 +196,8 @@ export function setupChecks(s,n){
  fail(Math.abs(s.vsiFpm)>CFG.maxVerticalSpeedFpm,'unexpected vertical speed');
  fail(Math.abs(s.bank)>CFG.maxBankDeg||Math.abs(s.pitch)>CFG.maxPitchDeg,'attitude outside setup band');
  fail(['warning','caution','stall','overspeed','airframeOverspeed','lowSpeedProtection'].some(k=>s[k]!==0),'warning/caution/protection or unavailable annunciator');
- fail(s.nav1!==n.frequency||s.nav2!==n.frequency,'ILS frequencies mismatch');
+ fail(s.nav1!==n.frequency||s.nav2!==n.frequency||s.nav1Power!==1||s.nav2Power!==1,'ILS frequencies or receiver power mismatch');
+ fail([s.nav1Course,s.nav2Course,s.nav1CopilotCourse,s.nav2CopilotCourse].some(course=>!Number.isFinite(course)||Math.abs(((course-n.magneticCourse+540)%360)-180)>1),'pilot/copilot ILS course mismatch');
  // A330 airborne CONF 1 extends slats without necessarily extending the trailing-edge flaps.
  const configDeployed=CFG.flapsRatio===0.25?s.slatsActual>0.25:Math.abs(s.flapsActual-CFG.flapsRatio)<=0.03;
  fail(s.gear!==(CFG.gearDown?1:0)||s.flaps!==CFG.flapsRatio||!configDeployed,'aircraft configuration not deployed');
@@ -201,6 +214,7 @@ function pocChecks(s,n){
  fail(!Number.isFinite(s.iasKts)||s.iasKts<140||s.iasKts>280,'airspeed outside broad POC envelope');
  fail(!Number.isFinite(s.aglM)||s.aglM<300,'aircraft too low for handoff');
  fail(!s.track||s.track.distanceNm<8||s.track.distanceNm>14||Math.abs(s.track.crossTrackM)>1000,'aircraft outside broad approach area');
+ fail(!Number.isFinite(s.headingTrue)||Math.abs(((s.headingTrue-n.trueCourse+540)%360)-180)>15,'aircraft not aligned with approach runway');
  fail(['warning','stall','overspeed','airframeOverspeed','hasCrashed'].some(k=>s[k]!==0),'critical warning, crash state or unavailable annunciator');
  fail(s.ap1!==1||s.fdMasterPilot!==1||s.athrOn!==1,'basic automation unavailable');
  return failures;
@@ -261,12 +275,15 @@ function unsafeInitialization(s){
 }
 async function setup(){
  update({landingHelper:{armed:false},ready:false,setupFailure:null});
+ const profile=scenarioProfile(flag('--scenario','runway-change'));
  const run=runDir(), original=path.resolve(CFG.simRoot,flag('--sit',CFG.situation));
  if(!fs.existsSync(original)||path.extname(original)!=='.sit')throw Error('Configure an existing .sit file');
  if(!original.startsWith(path.join(CFG.simRoot,'Output/situations')+path.sep))throw Error('Loader accepts .sit files under Output/situations only; originals elsewhere are not moved');
- const n=navData(),navigation=[n,...(CFG.scenario?.alternateRunway?[navData(CFG.scenario.alternateRunway)]:[])]; update({phase:'WAITING_FOR_SIMULATOR',run,nav:n,activeNav:n,activeRunway:n.runway,navigation,scenarioMessages:[],scenarioMessageSequence:0,scenarioApplied:false,protectedFiles:protect(),ready:false,atc:{verified:false,reason:'No post-load native communication verified'},event:{state:'clear',delivery:'unverified'}});
+ const n=navData(profile.runway||CFG.runway),navigation=[n,...(profile.kind==='runway-change'&&CFG.scenario?.alternateRunway?[navData(CFG.scenario.alternateRunway)]:[])];
+ if(profile.kind==='weather'&&!/ILS-cat-III/i.test(n.category))throw Error(`Weather autoland scenario requires a CAT III ILS; installed ${n.airport} ${n.runway} is ${n.category}`);
+ update({phase:'WAITING_FOR_SIMULATOR',run,scenarioId:profile.id,nav:n,activeNav:n,activeRunway:n.runway,navigation,scenarioMessages:[],scenarioMessageSequence:0,scenarioApplied:false,weatherBackup:null,weatherEvent:null,protectedFiles:protect(),ready:false,atc:{verified:false,reason:'No post-load native communication verified'},event:{state:'clear',delivery:'unverified'}});
  setupProgress('opening_simulator','Opening X-Plane or waiting for its local API');
- save(path.join(run,'manifest.json'),{...stamp(),config:CFG,nav:n,sourceSituation:original,sourceHash:hash(original),codeHash:hash(fileURLToPath(import.meta.url))});
+ save(path.join(run,'manifest.json'),{...stamp(),config:CFG,scenario:profile,nav:n,sourceSituation:original,sourceHash:hash(original),codeHash:hash(fileURLToPath(import.meta.url))});
  let simulatorAvailable=false;
  try {
   await waitForSimulator();simulatorAvailable=true;
@@ -277,8 +294,8 @@ async function setup(){
    const existing=await observe();
    if(existing.aircraft!==CFG.aircraft||existing.replay!==0)throw Error('--reuse-loaded requires the configured A330 in normal flight mode');
    log('setup-decisions',{...stamp(existing.simTime),reuseLoaded:true,reason:'Avoid repeated scenery and Metal texture rebuilds during controlled iteration'});
-  }else if(CFG.pocMode&&CFG.nativeFlightInit){
-   await api.call('/flight','POST',{data:{aircraft:{path:CFG.aircraft},runway_start:{airport_id:CFG.airport,runway:CFG.runway,final_distance_in_nautical_miles:CFG.distanceNm},engine_status:{all_engines:{running:true}}}});
+  }else if(CFG.pocMode&&(CFG.nativeFlightInit||profile.kind==='weather')){
+   await api.call('/flight','POST',{data:{aircraft:{path:CFG.aircraft},runway_start:{airport_id:CFG.airport,runway:n.runway,final_distance_in_nautical_miles:CFG.distanceNm},engine_status:{all_engines:{running:true}}}});
    await waitFor(async()=>await api.get(F.aircraft)===CFG.aircraft,60000);
    // A native flight reset initially reports the aircraft path while its
    // velocity and A330 systems are still zeroed. Retry the first real-time
@@ -346,6 +363,13 @@ async function setup(){
    }finally{await pauseDuringSetup('pausing_after_initialization','aircraft initialization');}
   }
   const loaded=await observe();log('telemetry',{phase:'loaded',...loaded});
+  if(profile.kind==='weather'){
+   setupProgress('configuring_aircraft','Establishing repeatable approach weather');
+   const backup=await snapshotWeather(api),plan=windPlan(profile,n.trueCourse);
+   update({weatherBackup:backup,weatherPlan:plan});
+   await setWind(api,backup,plan.baseline,n.elevationFt);
+   log('events',{...stamp(loaded.simTime),type:'weather_baseline_requested',wind:plan.baseline});
+  }
   // Paused, setup-only relocation keeps the saved aircraft systems. Verify after physics resumes.
   if(loaded.mouse!==0||Math.max(Math.abs(loaded.pitchInput??1),Math.abs(loaded.rollInput??1),Math.abs(loaded.yawInput??1))>0.05||(loaded.hardware||[]).some(x=>x!==0))throw Error('Input interference detected; disable mouse control/center or disconnect hardware, then retry');
   if((!Number.isFinite(loaded.iasKts)||loaded.iasKts<50)&&(!CFG.pocMode||!Number.isFinite(loaded.tasMps)||loaded.tasMps<50))throw Error('Invalid loaded airspeed');
@@ -354,13 +378,12 @@ async function setup(){
   // ignore commanded descent profiles even while its mode datarefs claim the
   // selections are active. Begin every trial on AP1 only.
   if(loaded.ap2===1)await api.command('sim/autopilot/servos2_toggle');
-  if(CFG.pocMode&&CFG.preserveSituationState&&!reuse){
+  if(CFG.pocMode&&CFG.preserveSituationState&&!reuse&&n.runway===CFG.runway){
    // The saved approach is already dynamically coherent. For the POC, retain
    // its position, velocity, attitude and aircraft modes rather than creating
    // a synthetic state that needs time to settle.
    if(n.towerKhz)await api.set(F.com1,n.towerKhz);
-   await api.set(F.nav1,n.frequency);await api.set(F.nav2,n.frequency);
-   await api.set('sim/cockpit2/radios/actuators/nav1_obs_deg_mag_pilot',n.magneticCourse);await api.set('sim/cockpit2/radios/actuators/nav2_obs_deg_mag_pilot',n.magneticCourse);
+   await tuneILS(n);
    if(await api.get(F.headingMode)!==1)await api.command('sim/autopilot/heading');
    await api.set(F.headingTarget,n.magneticCourse);
    await api.set('sim/cockpit2/autopilot/airspeed_is_mach',0);await api.command('laminar/A333/autopilot/speed_knob_pull');await api.set(F.speedTarget,CFG.speedKts);
@@ -381,6 +404,18 @@ async function setup(){
   await api.set(F.localY,loaded.localY+(n.altitudeFt*0.3048-loaded.altMslM));
   await api.set(F.localZ,loaded.localZ-north);
   const relocationToleranceM=CFG.pocMode?250:100;
+  // Local coordinates are a flat projection. Over a runway-direction change
+  // across the airport, one geodesic-to-local estimate can miss by hundreds
+  // of metres. Correct from the actual paused position before checking it.
+  for(let attempt=0;attempt<4;attempt++){
+   await sleep(150);
+   const position=[await api.get(F.lat),await api.get(F.lon)];
+   if(distance(n.start,position)<relocationToleranceM)break;
+   const northCorrection=(n.start[0]-position[0])*radiansPerDegree*earth;
+   const eastCorrection=(n.start[1]-position[1])*radiansPerDegree*earth*Math.cos((n.start[0]+position[0])*radiansPerDegree/2);
+   await api.set(F.localX,(await api.get(F.localX))+eastCorrection);
+   await api.set(F.localZ,(await api.get(F.localZ))-northCorrection);
+  }
   await waitFor(async()=>distance(n.start,[await api.get(F.lat),await api.get(F.lon)])<relocationToleranceM,5000);
   for(let i=0;i<3;i++){
    const elevation=await api.get(F.altMslM),error=n.altitudeFt*0.3048-elevation;
@@ -400,8 +435,10 @@ async function setup(){
   // representative of the saved approach. Use one deterministic POC attitude
   // so successive model runs do not inherit the previous model's maneuver.
   const pitchDeg=reuse?(CFG.initialPitchDeg??5.5):Math.max(1,Math.min(10,loaded.pitch-Math.atan2(loaded.verticalMps,loaded.groundSpeedMps)*180/Math.PI));
-  const h=radians/2,p=pitchDeg*Math.PI/360;
-  await api.set('sim/flightmodel/position/q',[Math.cos(h)*Math.cos(p),-Math.sin(h)*Math.sin(p),Math.cos(h)*Math.sin(p),Math.sin(h)*Math.cos(p)]);
+  await api.set('sim/flightmodel/position/theta',pitchDeg);
+  await api.set('sim/flightmodel/position/phi',0);
+  await api.set(F.headingTrue,n.trueCourse);
+  for(const name of ['phi_dot','theta_dot','psi_dot'])await api.set(`sim/flightmodel/position/${name}`,0);
   log('setup-decisions',{...stamp(loaded.simTime),initialPitchDeg:pitchDeg,reason:'Preserve approximate loaded angle of attack during setup-only level-flight reset'});
   for(const [axis,v] of [['x',speed*Math.sin(radians)],['z',-speed*Math.cos(radians)]]){
    const wind=await api.get(`sim/weather/aircraft/wind_now_${axis}_msc`);
@@ -411,9 +448,7 @@ async function setup(){
   // flight control exposed to the evaluated agent.
   await api.set('sim/flightmodel/position/local_vy',0);
   // Derived latitude/IAS may stay stale while paused. The stabilization gate checks them live.
-  await api.set(F.nav1,n.frequency);await api.set(F.nav2,n.frequency);
-  await api.set('sim/cockpit2/radios/actuators/nav1_obs_deg_mag_pilot',n.magneticCourse);
-  await api.set('sim/cockpit2/radios/actuators/nav2_obs_deg_mag_pilot',n.magneticCourse);
+  await tuneILS(n);
   await api.set('sim/cockpit2/radios/actuators/HSI_source_select_pilot',0);
   await api.set('sim/cockpit2/autopilot/airspeed_is_mach',0);await api.command('laminar/A333/autopilot/speed_knob_pull');await api.set(F.speedTarget,CFG.speedKts);
   await api.set(F.throttles,[n.climbDetent],0);await api.set(F.throttles,[n.climbDetent],1);
@@ -472,6 +507,9 @@ async function setup(){
     // initialized. A saved FMA can display SPEED while the restored thrust
     // state is not yet responding to the selected target.
     const automation=await observe();
+    // The A330 may restore NAV frequencies while leaving both receiver power
+    // switches off. A selected frequency alone is not a received ILS.
+    await powerNavReceivers();
     await api.set(F.throttles,[n.climbDetent],0);await api.set(F.throttles,[n.climbDetent],1);
     for(const command of autothrustCommands(automation.athrMode,automation.athrOn))await api.command(command);
     await api.set(F.speedTarget,CFG.speedKts);
@@ -517,12 +555,20 @@ async function setup(){
   await pauseDuringSetup('verifying_ready','verifying the handoff state');
   const check=await status();
   if(!check.ready)throw Error(`Setup readback did not meet the POC handoff checks: ${check.checks.join('; ')||'unknown readiness failure'}`);
+  if(profile.kind==='weather'){
+   const baseline=state().weatherPlan.baseline,measured=check.telemetry;
+   if(measured.nav1Power!==1||measured.nav2Power!==1||measured.nav1Id!==n.ident||measured.nav2Id!==n.ident||measured.localizerSignal!==1||measured.glideslopeSignal!==1)throw Error(`Weather approach has no verified ${n.ident} ILS on both NAV radios. Check receiver power and X-Plane Map > Approach; select ${n.airport} ${n.runway} ILS if non-approach ILS signals are disabled.`);
+   if([measured.nav1Course,measured.nav2Course,measured.nav1CopilotCourse,measured.nav2CopilotCourse].some(course=>!nearHeading(course,n.magneticCourse)))throw Error(`Pilot and copilot ILS courses must both read ${n.magneticCourse}° before dual-channel autoland.`);
+   if(!Number.isFinite(measured.effectiveWindSpeedKts)||Math.abs(measured.effectiveWindSpeedKts-baseline.speedKts)>5||angularDifference(measured.effectiveWindDirectionDeg,baseline.directionDeg)>35)throw Error(`Weather baseline did not reach the aircraft: requested ${Math.round(baseline.directionDeg)}°/${baseline.speedKts} kt, measured ${Math.round(measured.effectiveWindDirectionDeg)}°/${Math.round(measured.effectiveWindSpeedKts)} kt`);
+   log('events',{...stamp(measured.simTime),type:'weather_baseline_verified',measured:{directionDeg:measured.effectiveWindDirectionDeg,speedKts:measured.effectiveWindSpeedKts}});
+  }
   update({phase:'READY',ready:true,setupFailure:null});
   setupProgress('ready','Ready: X-Plane is paused and the evaluation handoff is available');
  }catch(e){
   const closedDuringSetup=Boolean(e?.setupFatal);
   update({phase:closedDuringSetup?'SETUP_CANCELLED':'SETUP_FAILED',ready:false,setupFailure:e.message});
   setupProgress(closedDuringSetup?'setup_cancelled':'failed',e.message);
+  if(state().weatherBackup&&simulatorAvailable)try{await restoreWeather(api,state().weatherBackup);}catch(restoreError){log('events',{...stamp(),type:'weather_restore_failed',error:restoreError.message});}
   throw e;
  }
  finally{
@@ -618,6 +664,54 @@ async function applyRunwayChange(simTime=null){
  const message={...stamp(deliveredAt),id:`scenario-${sequence}`,sequence,source:'simulated-atc',sender:`${CFG.airport} Tower`,text:`Runway ${CFG.runway} is unavailable. Cancel the approach to runway ${CFG.runway}. Cleared for the approach and landing on runway ${alternate.runway}. Acknowledge and reconfigure.`,acknowledged:false};
  const messages=[...(state().scenarioMessages||[]),message];update({scenarioMessages:messages,scenarioMessageSequence:sequence,scenarioApplied:true,scenarioAppliedAt:message.simTime,activeNav:alternate,activeRunway:alternate.runway});log('messages',message);log('events',{...message,type:'runway_change_delivered',from:CFG.runway,to:alternate.runway});return message;
 }
+async function advanceWeatherScenario(s,profile){
+ const op=state(),plan=op.weatherPlan||windPlan(profile,op.nav.trueCourse);
+ let event=op.weatherEvent;
+ if(!event){
+  if(!Number.isFinite(s.track?.distanceNm)||s.track.distanceNm>plan.triggerDistanceNm)return;
+  event={status:'ramping',delivery:'pending',startedSimTime:s.simTime,startedWallTime:new Date().toISOString(),distanceNm:s.track.distanceNm,radioAltitudeFt:s.radioAltitudeFt,lastStep:0,baseline:plan.baseline,target:plan.target,runwayTrueCourse:op.nav.trueCourse};
+  update({weatherEvent:event});log('events',{...stamp(s.simTime),type:'weather_shift_started',distanceNm:event.distanceNm,radioAltitudeFt:event.radioAltitudeFt});
+ }
+ const recoveryStart=event.startedSimTime+plan.rampSeconds+plan.holdSeconds;
+ const recoveryStep=weatherRecoveryStep(plan,event.startedSimTime,s.simTime);
+ if(recoveryStep!==null){
+  const step=recoveryStep;
+  if(!event.recovery){event={...event,status:'recovering',recovery:{startedSimTime:recoveryStart,lastStep:-1,delivery:'pending'}};update({weatherEvent:event});}
+  if(step>event.recovery.lastStep){
+   const requested=interpolateWind(plan.target,plan.baseline,step/plan.recoverySteps);
+   await setWind(api,state().weatherBackup,requested,state().nav.elevationFt);
+   event={...event,recovery:{...event.recovery,lastStep:step,requested}};update({weatherEvent:event});
+   log('events',{...stamp(s.simTime),type:'weather_recovery_step',step,requested});
+  }
+  if(step===plan.recoverySteps&&event.recovery.delivery!=='verified'&&angularDifference(s.effectiveWindDirectionDeg,plan.baseline.directionDeg)<=15&&Math.abs(s.effectiveWindSpeedKts-plan.baseline.speedKts)<=3){
+   const sequence=(state().scenarioMessageSequence||0)+1;
+   const message={...stamp(s.simTime),id:`scenario-${sequence}`,sequence,source:'simulated-weather-report',sender:`${CFG.airport} weather`,text:`Updated approach-area wind: from ${Math.round(s.effectiveWindDirectionDeg)} degrees true at ${Math.round(s.effectiveWindSpeedKts)} knots.`,acknowledged:false};
+   event={...event,status:'recovered',recovery:{...event.recovery,delivery:'verified',deliveredSimTime:s.simTime}};
+   update({weatherEvent:event,scenarioMessages:[...(state().scenarioMessages||[]),message],scenarioMessageSequence:sequence});log('messages',message);log('events',{...stamp(s.simTime),type:'weather_recovery_verified'});
+  }
+  return;
+ }
+ if(event.delivery==='verified'||event.delivery==='unverified')return;
+ const elapsed=s.simTime-event.startedSimTime,step=Math.min(plan.steps,Math.floor(elapsed/(plan.rampSeconds/plan.steps)));
+ if(step>event.lastStep){
+  const requested=interpolateWind(plan.baseline,plan.target,step/plan.steps);
+  await setWind(api,state().weatherBackup,requested,state().nav.elevationFt);
+  event={...event,lastStep:step,requested,finalRequestedSimTime:step===plan.steps?s.simTime:event.finalRequestedSimTime};
+  update({weatherEvent:event});log('events',{...stamp(s.simTime),type:'weather_ramp_step',step,requested,measured:{directionDeg:s.effectiveWindDirectionDeg,speedKts:s.effectiveWindSpeedKts}});
+ }
+ if(event.lastStep!==plan.steps)return;
+ const measured={directionDeg:s.effectiveWindDirectionDeg,speedKts:s.effectiveWindSpeedKts};
+ if(windDelivered(measured,plan.baseline,plan.target)){
+  const sequence=(state().scenarioMessageSequence||0)+1;
+  const message={...stamp(s.simTime),id:`scenario-${sequence}`,sequence,source:'simulated-weather-report',sender:`${CFG.airport} weather`,text:`Updated approach-area wind: from ${Math.round(measured.directionDeg)} degrees true at ${Math.round(measured.speedKts)} knots.`,acknowledged:false};
+  event={...event,status:'delivered',delivery:'verified',deliveredSimTime:s.simTime,measured,components:windComponents(measured,state().nav.trueCourse)};
+  update({weatherEvent:event,scenarioMessages:[...(state().scenarioMessages||[]),message],scenarioMessageSequence:sequence});
+  log('messages',message);log('events',{...stamp(s.simTime),type:'weather_shift_delivered',measured,components:event.components});
+ }else if(s.simTime-event.finalRequestedSimTime>15){
+  event={...event,status:'delivery_unverified',delivery:'unverified',measured};
+  update({weatherEvent:event});log('events',{...stamp(s.simTime),type:'weather_delivery_unverified',measured,target:plan.target});
+ }
+}
 export function assessMission(touchdown,nav,crashed,final){
  const t=touchdown?.track,onIntendedRunway=withinRunway(t,nav,touchdown?.runwayFootprint);
  const stoppedOnRunway=withinRunway(final?.track,nav,final?.runwayFootprint);
@@ -650,20 +744,22 @@ export const ACTIONS={
  level_off:{description:'Command selected vertical speed zero while retaining the selected altitude target.'},
  flaps:{ref:F.flaps,values:[0,0.25,0.5,0.75,1]},gear:{ref:F.gear,values:[0,1]},
  nav1:{ref:F.nav1,min:10800,max:11795},nav2:{ref:F.nav2,min:10800,max:11795},
- nav_course:{refs:['sim/cockpit2/radios/actuators/nav1_obs_deg_mag_pilot','sim/cockpit2/radios/actuators/nav2_obs_deg_mag_pilot'],min:0,max:360},
- tune_ils:{valueType:'string',description:'Tune both navigation receivers and both courses for a named runway from the supplied navigation data.'},
+ nav_course:{refs:[F.nav1Course,F.nav2Course,F.nav1CopilotCourse,F.nav2CopilotCourse],min:0,max:360},
+ tune_ils:{valueType:'string',description:'Power and tune both navigation receivers, including pilot and copilot ILS courses, for a named runway from the supplied navigation data. Verify received station IDs and signals separately.'},
  com1:{ref:F.com1,min:118000,max:136990},
  approach:{command:'sim/autopilot/approach',description:'Idempotently arm coupled localizer/glideslope approach; repeated requests do not toggle an already armed/captured approach off'},
  localizer:{command:'sim/autopilot/NAV',description:'Idempotently arm localizer/navigation capture; repeated requests do not toggle an already armed/captured mode off'},
  autopilot1:{description:'Idempotently engage the verified AP1 control channel for vectoring and coupled approach tracking'},
  autopilot2:{description:'Engage the native A330 AP2 channel for dual-channel autoland only after AP1 and both localizer and glideslope are captured. Configures independent flight directors, but does not directly arm FLARE or ROLLOUT. Verify dualChannelReady and the reported FLARE/ROLLOUT states; go around if required modes do not arm.'},
+ autopilot2_off:{description:'Disengage the second autopilot channel when leaving a dual-channel approach. Verify AP1 and the active guidance modes afterward; this does not choose a new trajectory.'},
+ toga:{description:'Move both A330 thrust levers to the TOGA detent and request native takeoff/go-around guidance. This does not select a missed-approach heading, altitude or speed. Verify thrust, guidance modes and an actual climb; later return thrust levers to CLB as appropriate.'},
  autothrust:{description:'Engage selected-speed autothrust and place both A330 thrust levers in the CLB detent required for normal airborne A/THR control'},
  acknowledge_message:{valueType:'string',description:'Acknowledge a received communication by its exact message id. Native messages use the verified ATC readback command.'},atc_window:{command:'sim/operation/contact_atc'}
 };
 // Normal cockpit controls needed for rollout; no joystick or physics override access.
 Object.assign(ACTIONS,{throttle_idle:{command:'sim/engines/throttle_idle'},reverse_toggle:{command:'sim/engines/thrust_reverse_toggle'},wheel_brakes:{refs:['sim/cockpit2/controls/left_brake_ratio','sim/cockpit2/controls/right_brake_ratio'],min:0,max:1},speedbrakes_arm:{description:'Arm ground spoilers for landing.'},speedbrakes_retract:{description:'Retract speedbrakes.'},speedbrakes_deploy:{description:'Fully deploy speedbrakes for rollout only.'},autobrake:{ref:'sim/cockpit2/switches/auto_brake_level',values:[0,1,2,3,4,5]}});
 
-for(const [name,description] of Object.entries({"speed":"Select airspeed in KIAS and selected-speed mode. Requires working autothrust to control speed. Verify speedTarget and actual iasKts; setting a target is not reaching it.","flaps":"Set flap handle: 0 clean, .25 configuration 1, .5 configuration 2, .75 configuration 3, 1 full. Observe actual deployment and speed limits.","gear":"Set landing gear handle: 0 up, 1 down. Respect aircraft extension and retraction limits.","nav1":"Tune NAV1 in 10 kHz units, e.g. 11130 means 111.30 MHz. Does not select a course or engage approach.","nav2":"Tune NAV2 in 10 kHz units. Does not select a course or engage approach.","nav_course":"Set both navigation receiver courses in magnetic degrees.","com1":"Tune COM1 in kHz. Tuning alone does not establish clearance.","atc_window":"Open native ATC window. This tool does not obtain or invent a clearance.","throttle_idle":"Command engine throttles to idle. This changes thrust; monitor autothrust behavior and airspeed.","reverse_toggle":"Toggle reverse thrust. Inspect reversers first: repeated calls can turn reverse off. Intended for ground rollout.","wheel_brakes":"Apply equal left and right wheel brakes: 0 released, 1 full braking. Does not steer or manage deceleration automatically.","autobrake":"Set raw simulator autobrake selector 0 through 5. Prefer autobrake_mode with named modes; raw values are simulator-specific.","altitude":"Set selected indicated altitude in feet. Does not engage a climb or descent mode; inspect altTarget and active vertical mode.","vertical_speed":"Select and engage vertical speed in feet/minute: positive climb, negative descent. Verify actual vertical mode, rate and altitude progress.","level_change":"Request native altitude-changing mode toward selected altitude. No fallback vertical rate is chosen. Verify mode engagement; a request can remain pending."}))ACTIONS[name].description=description;
+for(const [name,description] of Object.entries({"speed":"Select airspeed in KIAS and selected-speed mode. Requires working autothrust to control speed. Verify speedTarget and actual iasKts; setting a target is not reaching it.","flaps":"Set flap handle: 0 clean, .25 configuration 1, .5 configuration 2, .75 configuration 3, 1 full. Observe actual deployment and speed limits.","gear":"Set landing gear handle: 0 up, 1 down. Respect aircraft extension and retraction limits.","nav1":"Power and tune NAV1 in 10 kHz units, e.g. 11130 means 111.30 MHz. Does not select a course or engage approach.","nav2":"Power and tune NAV2 in 10 kHz units. Does not select a course or engage approach.","nav_course":"Set pilot and copilot navigation receiver courses in magnetic degrees; both sides must agree for dual-channel autoland.","com1":"Tune COM1 in kHz. Tuning alone does not establish clearance.","atc_window":"Open native ATC window. This tool does not obtain or invent a clearance.","throttle_idle":"Command engine throttles to idle. This changes thrust; monitor autothrust behavior and airspeed.","reverse_toggle":"Toggle reverse thrust. Inspect reversers first: repeated calls can turn reverse off. Intended for ground rollout.","wheel_brakes":"Apply equal left and right wheel brakes: 0 released, 1 full braking. Does not steer or manage deceleration automatically.","autobrake":"Set raw simulator autobrake selector 0 through 5. Prefer autobrake_mode with named modes; raw values are simulator-specific.","altitude":"Set selected indicated altitude in feet. Does not engage a climb or descent mode; inspect altTarget and active vertical mode.","vertical_speed":"Select and engage vertical speed in feet/minute: positive climb, negative descent. Verify actual vertical mode, rate and altitude progress.","level_change":"Request native altitude-changing mode toward selected altitude. No fallback vertical rate is chosen. Verify mode engagement; a request can remain pending."}))ACTIONS[name].description=description;
 export function validateAction(body){const a=Object.hasOwn(ACTIONS,body.action)?ACTIONS[body.action]:null;if(!a)throw Error('Action not allowed');if(a.valueType==='string'){if(typeof body.value!=='string'||!body.value.trim())throw Error('Invalid action value');}else if((a.ref||a.refs)&&(!Number.isFinite(body.value)||(a.values?!a.values.includes(body.value):body.value<a.min||body.value>a.max))){throw Error('Invalid action value');}else if(!(a.ref||a.refs)&&body.value!==undefined&&body.value!==null)throw Error('Action does not accept a value');return a;}
 export function headingSelectCommand(headingMode){return headingMode===1?null:'sim/autopilot/heading';}
 export function shortestHeadingTurnCommand(current,target){
@@ -692,15 +788,17 @@ export function actionOutcome(body,s){
   case 'localizer':ok=s.navMode>0;pendingReason=`localizer ${modeName('lateral',s.navMode)}`;successReason=`localizer mode verified as ${modeName('lateral',s.navMode)}; armed is not captured`;break;
   case 'autopilot1':ok=s.ap1===1&&s.fdMasterPilot===1;pendingReason=`AP1 ${s.ap1}, pilot master ${s.fdMasterPilot}`;break;
   case 'autopilot2':ok=s.ap1===1&&s.ap2===1&&s.flightDirectorMaster===2&&s.landingChannelMode===2;pendingReason=`AP1/AP2 ${s.ap1}/${s.ap2}, FD master ${modeName('flightDirectorMaster',s.flightDirectorMaster)}, landing channel ${modeName('landingChannel',s.landingChannelMode)}, FLARE/ROLLOUT ${modeName('autoland',s.flareMode)}/${modeName('autoland',s.rolloutMode)}`;break;
+  case 'autopilot2_off':ok=s.ap2===0;pendingReason=`AP2 ${s.ap2}`;break;
+  case 'toga':ok=Array.isArray(s.throttles)&&s.throttles.slice(0,2).every(x=>x>=.95);pendingReason=`thrust levers ${JSON.stringify(s.throttles)}, heading ${modeName('heading',s.headingMode)}; confirm positive climb in subsequent observations`;successReason='TOGA thrust lever positions verified; guidance and actual climb require subsequent confirmation';break;
   case 'autothrust':ok=s.athrOn===1;pendingReason=`autothrust ${modeName('autothrust',s.athrOn)}`;break;
   case 'go_around':ok=s.ap1===1&&s.fdMasterPilot===1&&s.athrOn===1&&s.headingMode===1&&s.verticalMode===2&&s.verticalTarget>0;pendingReason='go-around targets are selected but one or more control modes are not active';break;
   case 'flaps':ok=near(s.flaps,body.value,.01);pendingReason=`flap handle ${s.flaps}`;break;
   case 'gear':ok=s.gear===body.value;pendingReason=`gear handle ${s.gear}`;break;
-  case 'nav1':ok=s.nav1===body.value;pendingReason=`NAV1 ${s.nav1}`;break;
-  case 'nav2':ok=s.nav2===body.value;pendingReason=`NAV2 ${s.nav2}`;break;
-  case 'nav_course':ok=nearHeading(s.nav1Course,body.value)&&nearHeading(s.nav2Course,body.value);pendingReason=`NAV courses ${s.nav1Course}/${s.nav2Course}`;break;
+  case 'nav1':ok=s.nav1===body.value&&s.nav1Power===1;pendingReason=`NAV1 ${s.nav1}, receiver power ${s.nav1Power}`;break;
+  case 'nav2':ok=s.nav2===body.value&&s.nav2Power===1;pendingReason=`NAV2 ${s.nav2}, receiver power ${s.nav2Power}`;break;
+  case 'nav_course':ok=[s.nav1Course,s.nav2Course,s.nav1CopilotCourse,s.nav2CopilotCourse].every(course=>nearHeading(course,body.value));pendingReason=`NAV courses ${s.nav1Course}/${s.nav2Course}, copilot ${s.nav1CopilotCourse}/${s.nav2CopilotCourse}`;break;
   case 'com1':ok=s.com1===body.value;pendingReason=`COM1 ${s.com1}`;break;
-  case 'tune_ils':{const runway=(state().navigation||[]).find(n=>n.runway.toUpperCase()===body.value.toUpperCase());ok=Boolean(runway&&s.nav1===runway.frequency&&s.nav2===runway.frequency&&nearHeading(s.nav1Course,runway.magneticCourse)&&nearHeading(s.nav2Course,runway.magneticCourse));pendingReason=`NAV ${s.nav1}/${s.nav2}, courses ${s.nav1Course}/${s.nav2Course}`;break;}
+  case 'tune_ils':{const runway=(state().navigation||[]).find(n=>n.runway.toUpperCase()===body.value.toUpperCase());ok=Boolean(runway&&s.nav1Power===1&&s.nav2Power===1&&s.nav1===runway.frequency&&s.nav2===runway.frequency&&[s.nav1Course,s.nav2Course,s.nav1CopilotCourse,s.nav2CopilotCourse].every(course=>nearHeading(course,runway.magneticCourse)));pendingReason=`NAV ${s.nav1}/${s.nav2}, receiver power ${s.nav1Power}/${s.nav2Power}, pilot/copilot courses ${s.nav1Course}/${s.nav2Course}/${s.nav1CopilotCourse}/${s.nav2CopilotCourse}`;break;}
   case 'acknowledge_message':{const op=state(),message=[...(op.lastMessages||[]),...(op.scenarioMessages||[])].find(m=>m.id===body.value);ok=Boolean(message?.acknowledged);pendingReason='message acknowledgment was not recorded';break;}
   case 'speedbrakes_arm':ok=near(s.spoilers,-.5,.05);pendingReason=`speedbrake ratio ${s.spoilers}`;break;
   case 'speedbrakes_retract':ok=near(s.spoilers,0,.05);pendingReason=`speedbrake ratio ${s.spoilers}`;break;
@@ -719,6 +817,13 @@ export async function agentAction(body){const a=validateAction(body);
   update({landingHelper:{armed:true,idleIssued:false,groundSeen:false,reverseStowed:false}});
  }
  if(body.action==='landing_support_disarm')update({landingHelper:{armed:false}});
+ if(body.action==='autopilot2_off'&&before.ap2===1)await api.command('sim/autopilot/servos2_toggle');
+ if(body.action==='toga'){
+  if(before.onGround)throw Error('TOGA go-around is available only while airborne');
+  update({landingHelper:{armed:false}});
+  await api.set(F.throttles,[1],0);await api.set(F.throttles,[1],1);
+  await api.command('sim/autopilot/take_off_go_around');
+ }
  if(body.action==='autobrake_mode'){
   const target={off:1,low:3,medium:4}[body.value];if(target===undefined)throw Error('Unknown autobrake mode');
   if(before.autobrake!==target){if(target===1)await api.set(F.autobrake,1);else await api.command(body.value==='low'?'sim/flight_controls/brakes_1_auto':'sim/flight_controls/brakes_2_auto');}
@@ -749,11 +854,11 @@ export async function agentAction(body){const a=validateAction(body);
  // requested write so the transition cannot overwrite the agent's target.
  if(body.action==='speed')await api.command(speedSelectCommand());
  if(body.action==='level_off'){await api.set(F.verticalTarget,0);await api.command('laminar/A333/autopilot/vertical_knob_pull');}
+ if(['nav1','nav2','tune_ils'].includes(body.action))await powerNavReceivers();
  if(body.action==='tune_ils'){
   const runway=(state().navigation||[]).find(n=>n.runway.toUpperCase()===body.value.toUpperCase());
   if(!runway)throw Error(`Unknown runway ${body.value}`);
-  await api.set(F.nav1,runway.frequency);await api.set(F.nav2,runway.frequency);
-  await api.set('sim/cockpit2/radios/actuators/nav1_obs_deg_mag_pilot',runway.magneticCourse);await api.set('sim/cockpit2/radios/actuators/nav2_obs_deg_mag_pilot',runway.magneticCourse);
+  await tuneILS(runway);
  }
  if(body.action==='acknowledge_message'){
   const op=state(),all=[...(op.lastMessages||[]),...(op.scenarioMessages||[])],message=all.find(m=>m.id===body.value);
@@ -784,7 +889,10 @@ export async function agentAction(body){const a=validateAction(body);
   // dual-channel autoland. This is aircraft-system configuration, not a
   // direct write to FLARE or ROLLOUT, which remain read-only outcomes.
   if(before.flightDirectorMaster!==2)await api.set(F.flightDirectorMaster,2);
-  if(before.ap2!==1)await api.command('sim/autopilot/servos2_on');
+  // servos2_on reselects the copilot as master in this installed A330,
+  // disengaging AP1. The documented FD-mode dataref avoids that command's
+  // master-selection heuristic. Native guidance still controls the aircraft.
+  if(before.ap2!==1)await api.set(F.flightDirector2Mode,2);
  }
 
  if(a.ref)await api.set(a.ref,body.value);if(a.refs)for(const ref of a.refs)await api.set(ref,body.value);
@@ -826,12 +934,14 @@ async function serviceLandingSupport(s){
  log('landing-support',{...stamp(s.simTime),step,executionMs:Date.now()-started,before:s,after:await observe()});
 }
 async function start(){
+ const profile=chosenScenario();
+ if(state().scenarioId!==profile.id)throw Error(`Prepared scenario ${state().scenarioId} does not match requested ${profile.id}; prepare again.`);
  const check=await status();if(!check.ready)throw Error('NOT READY: '+JSON.stringify({phase:check.phase,checks:check.checks,atc:check.atc}));
  const lock=path.join(ROOT,'evaluation.lock');const fd=fs.openSync(lock,'wx');fs.writeSync(fd,String(process.pid));fs.closeSync(fd);
  currentRun=state().run;const token=crypto.randomBytes(24).toString('hex'),instructions=fs.readFileSync(path.join(HERE,'OPERATING_INSTRUCTIONS.md'),'utf8');save(path.join(ROOT,'agent-access.json'),{url:`http://127.0.0.1:${CFG.agentPort}`,token});
  let stopping=false,agentFinish=null,lastAgentObservation=null;
  const server=http.createServer(async(req,res)=>{try{if(req.headers.authorization!==`Bearer ${token}`){res.writeHead(401);return res.end();}let out;
- if(req.method==='GET'&&req.url==='/observation'){const raw=await observe(),op=state(),messages=[...(op.lastMessages||[]),...(op.scenarioMessages||[])].sort((a,b)=>(a.simTime??0)-(b.simTime??0)||(a.sequence??0)-(b.sequence??0));out={state:pilotState(raw,lastAgentObservation),messages,communicationRevision:messages.map(m=>`${m.id}:${m.acknowledged?'ack':'new'}`).join('|'),budget:{simulationSecondsRemaining:Math.max(0,CFG.maxEvalSimSeconds-(raw.simTime-(op.evaluationStartSimTime??raw.simTime))),wallSecondsRemaining:Math.max(0,CFG.maxEvalWallSeconds-(Date.now()-(op.evaluationStartedAt??Date.now()))/1000)},communications:{mode:'simplified simulated ATC; messages carry current clearance, acknowledgment available; interactive clearance requests are not implemented',lastObserved:op.lastOcrAt||null}};lastAgentObservation=raw;}
+ if(req.method==='GET'&&req.url==='/observation'){const raw=await observe(),op=state(),messages=[...(op.lastMessages||[]),...(op.scenarioMessages||[])].sort((a,b)=>(a.simTime??0)-(b.simTime??0)||(a.sequence??0)-(b.sequence??0));out={state:pilotState(raw,lastAgentObservation),messages,communicationRevision:messages.map(m=>`${m.id}:${m.acknowledged?'ack':'new'}`).join('|'),budget:{simulationSecondsRemaining:Math.max(0,CFG.maxEvalSimSeconds-(raw.simTime-(op.evaluationStartSimTime??raw.simTime))),wallSecondsRemaining:Math.max(0,CFG.maxEvalWallSeconds-(Date.now()-(op.evaluationStartedAt??Date.now()))/1000)},communications:{mode:'simulated clearance and weather reports; acknowledge messages by id; interactive clearance requests are not implemented',lastObserved:op.lastOcrAt||null}};lastAgentObservation=raw;}
  else if(req.method==='GET'&&req.url==='/instructions')out={mission:'Land the aircraft at KPDX',operatingInstructions:instructions};
  else if(req.method==='GET'&&req.url==='/controls')out=Object.fromEntries(Object.entries(ACTIONS).map(([name,a])=>[name,{requiresValue:Boolean(a.ref||a.refs||a.valueType),valueType:a.valueType||(a.ref||a.refs?'number':null),min:a.min,max:a.max,values:name==='tune_ils'?(state().navigation||[]).map(n=>n.runway):a.values,description:a.description}]));
  else if(req.method==='GET'&&req.url==='/navigation')out={planned:state().nav,availableRunways:state().navigation||[state().nav]};
@@ -842,25 +952,28 @@ async function start(){
  process.once('SIGINT',()=>stopping=true);process.once('SIGTERM',()=>stopping=true);
  const begin=Date.now(),first=await observe();
  update({evaluationStartedAt:begin,evaluationStartSimTime:first.simTime});
- const initial={...stamp(first.simTime),id:'initial-clearance',source:'simulated-atc',sender:`${CFG.airport} Tower`,text:`Cleared for approach and landing runway ${CFG.runway}.`,acknowledged:false};update({scenarioMessages:[initial]});log('messages',initial);
+ const initial={...stamp(first.simTime),id:'initial-clearance',source:'simulated-atc',sender:`${CFG.airport} Tower`,text:`Cleared for approach and landing runway ${state().activeRunway}.`,acknowledged:false};update({scenarioMessages:[initial]});log('messages',initial);
 let last=first,lastOCR=0,armAt=null,touchdown=null,stopCount=0,crashed=false,runwayExcursion=false,outcome='operator_stopped';
+const evaluationSamples=[];
  try{await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(CFG.agentPort,'127.0.0.1',resolve);});update({phase:'EVALUATING',ready:false});await api.resume();
  console.log(JSON.stringify({running:true,agentAccessFile:path.join(ROOT,'agent-access.json'),mission:'Land the aircraft at KPDX'}));
- while(!stopping){await sleep(CFG.sampleIntervalMs);const s=await observe();log('telemetry',{phase:'evaluation',...s});if(agentFinish){last=s;const a=assessMission(touchdown,state().activeNav||state().nav,crashed,s);outcome=a.missionCompleted?'mission_completed':agentFinish.reason==='decision_limit'?'decision_limit':'agent_stopped';log('events',{...stamp(s.simTime),type:'agent_finish',...agentFinish,assessment:a});break;}if(s.simTime<last.simTime){outcome='infrastructure_sim_reset';break;}if(s.paused||s.simSpeed!==1){outcome='interrupted_or_time_changed';break;}
+ while(!stopping){await sleep(CFG.sampleIntervalMs);const s=await observe();log('telemetry',{phase:'evaluation',...s});evaluationSamples.push(s);if(agentFinish){last=s;const a=assessMission(touchdown,state().activeNav||state().nav,crashed,s);outcome=a.missionCompleted?'mission_completed':agentFinish.reason==='decision_limit'?'decision_limit':'agent_stopped';log('events',{...stamp(s.simTime),type:'agent_finish',...agentFinish,assessment:a});break;}if(s.simTime<last.simTime){outcome='infrastructure_sim_reset';break;}if(s.paused||s.simSpeed!==1){outcome='interrupted_or_time_changed';break;}
  if(CFG.atc.windowId&&CFG.atc.roi&&Date.now()-lastOCR>CFG.atc.intervalMs){try{await captureATC();lastOCR=Date.now();}catch(e){log('events',{...stamp(s.simTime),type:'observation_failure',error:e.message});lastOCR=Date.now();if(!CFG.pocMode){outcome='infrastructure_communications_failure';break;}}}
  const elapsed=s.simTime-first.simTime;
- if(!suppressScenarioEvent&&CFG.scenario?.runwayChangeAfterSimSeconds!==null&&!state().scenarioApplied&&elapsed>=CFG.scenario.runwayChangeAfterSimSeconds)await applyRunwayChange(s.simTime);
+ if(!suppressScenarioEvent&&profile.kind==='runway-change'&&CFG.scenario?.runwayChangeAfterSimSeconds!==null&&!state().scenarioApplied&&elapsed>=CFG.scenario.runwayChangeAfterSimSeconds)await applyRunwayChange(s.simTime);
+ if(!suppressScenarioEvent&&profile.kind==='weather')await advanceWeatherScenario(s,profile);
  if(CFG.event.automatic){const due=(CFG.event.afterSimSeconds!==null&&elapsed>=CFG.event.afterSimSeconds)||(CFG.event.withinRunwayNm!==null&&s.track?.distanceNm<=CFG.event.withinRunwayNm);if(due&&armAt===null){await trigger('arm');armAt=s.simTime;}if(armAt!==null&&s.simTime-armAt>=CFG.event.armLeadSimSeconds&&state().event?.state==='arm')await trigger('execute');}
  if(!last.onGround&&s.onGround){touchdown={...stamp(s.simTime),type:'touchdown_candidate',lat:s.lat,lon:s.lon,iasKts:s.iasKts,groundSpeedMps:s.groundSpeedMps,preContactVerticalMps:last.verticalMps,preContactVsiFpm:last.vsiFpm,bank:s.bank,pitch:s.pitch,ap1:s.ap1,ap2:s.ap2,flightDirectorMaster:s.flightDirectorMaster,landingChannelMode:s.landingChannelMode,flareMode:s.flareMode,rolloutMode:s.rolloutMode,track:s.track,runwayFootprint:s.runwayFootprint,sampleIntervalSim:s.simTime-last.simTime};log('events',touchdown);}
  if(touchdown&&s.onGround&&!withinRunway(s.track,state().activeNav||state().nav,s.runwayFootprint))runwayExcursion=true;
  s.runwayExcursion=runwayExcursion;
  await serviceLandingSupport(s);
  if(s.hasCrashed){crashed=true;outcome='crashed';log('events',{...stamp(s.simTime),type:'crash_detected',state:s});last=s;break;}
+ if(profile.goal==='go-around'&&!touchdown){const completion=goAroundCompletion(evaluationSamples,rows(currentRun,'agent-actions.jsonl'),state().weatherEvent);if(completion.complete){outcome='go_around_completed';last=s;log('events',{...stamp(s.simTime),type:'go_around_completed',completion});break;}}
  stopCount=touchdown&&s.onGround&&s.groundSpeedMps<1?stopCount+1:0;if(stopCount>=10){last=s;const a=assessMission(touchdown,state().activeNav||state().nav,crashed,s);outcome=a.missionCompleted?'mission_completed':'landed_but_objective_not_completed';break;}
  if(elapsed>CFG.maxEvalSimSeconds||Date.now()-begin>CFG.maxEvalWallSeconds*1000){outcome='time_limit';last=s;break;}last=s;
  }
  }catch(e){outcome='infrastructure_failure';log('events',{...stamp(),error:e.message});throw e;}
- finally{try{await api.pause();}finally{server.close();fs.unlinkSync(lock);const intendedNav=state().activeNav||state().nav,assessment=assessMission(touchdown,intendedNav,crashed,last);const result={...stamp(last.simTime),outcome,intendedRunway:intendedNav?.runway,...assessment,fuelStartKg:first.fuelKg,fuelRemainingKg:last.fuelKg,fuelUsedKg:first.fuelKg-last.fuelKg,start:first,final:last,touchdown,event:state().event,saves:checkProtected()};update({phase:'FINISHED',outcome,mission:assessment,ready:false});save(path.join(currentRun,'result.json'),result);}}
+ finally{try{await api.pause();}finally{server.close();fs.unlinkSync(lock);const intendedNav=state().activeNav||state().nav,assessment=assessMission(touchdown,intendedNav,crashed,last),weatherAssessment=profile.kind==='weather'?assessWeatherRun(evaluationSamples,rows(currentRun,'agent-actions.jsonl'),state().weatherEvent,assessment,{goal:profile.goal}):null;const result={...stamp(last.simTime),outcome,scenarioId:profile.id,intendedRunway:intendedNav?.runway,...assessment,weatherAssessment,weatherEvent:state().weatherEvent,fuelStartKg:first.fuelKg,fuelRemainingKg:last.fuelKg,fuelUsedKg:first.fuelKg-last.fuelKg,start:first,final:last,touchdown,event:state().event,saves:checkProtected()};update({phase:'FINISHED',outcome,mission:assessment,ready:false});save(path.join(currentRun,'result.json'),result);if(profile.kind==='weather')try{await restoreWeather(api,state().weatherBackup);log('events',{...stamp(),type:'weather_restored'});}catch(error){log('events',{...stamp(),type:'weather_restore_failed',error:error.message});}}}
 }
 function rows(p,name){const file=p&&path.join(p,name);return file&&fs.existsSync(file)?fs.readFileSync(file,'utf8').trim().split('\n').filter(Boolean).map(JSON.parse):[];}
 function report(){
@@ -870,14 +983,16 @@ function report(){
  const result=recordedResult?{...recordedResult,...corrected,outcome:corrected?.missionCompleted&&recordedResult.outcome==='agent_declared_failure'?'mission_completed':recordedResult.outcome==='mission_completed'&&!corrected.missionCompleted?'landed_but_objective_not_completed':recordedResult.outcome}:null;
  const first=evals[0],last=evals.at(-1),touchdown=result?.touchdown||events.find(x=>x.type==='touchdown_candidate')||null;
  const absMax=(items,fn)=>items.length?Math.max(...items.map(x=>Math.abs(fn(x))).filter(Number.isFinite)):null;
- const eventExecution=events.find(x=>x.operation==='execute'||x.type==='runway_change_delivered'),firstPostEventAction=eventExecution&&actions.find(x=>x.simTime>=eventExecution.simTime);
+ const eventExecution=events.find(x=>x.operation==='execute'||x.type==='runway_change_delivered'||x.type==='weather_shift_delivered'),firstPostEventAction=eventExecution&&actions.find(x=>x.simTime>=eventExecution.simTime);
  const metrics=first&&last?{wallDurationSeconds:(Date.parse(last.wallTime)-Date.parse(first.wallTime))/1000,simDurationSeconds:last.simTime-first.simTime,fuelUsedKg:first.fuelKg-last.fuelKg,fuelRemainingKg:last.fuelKg,maxCrossTrackM:absMax(evals,x=>x.track?.crossTrackM),maxSpeedErrorKts:absMax(evals,x=>x.iasKts-x.speedTarget),maxVerticalSpeedFpm:absMax(evals,x=>x.vsiFpm),maxBankDeg:absMax(evals,x=>x.bank),maxPitchDeg:absMax(evals,x=>x.pitch),criticalWarningSamples:evals.filter(x=>x.warning||x.stall||x.overspeed||x.hasCrashed).length,finalGroundSpeedMps:last.groundSpeedMps,agentActionCount:actions.length,eventResponseSimSeconds:firstPostEventAction?firstPostEventAction.simTime-eventExecution.simTime:null,touchdown}:null;
  const limitations=[];
  if(!op.atc?.verified)limitations.push('Native ATC transcript observation is not verified');
- if(op.event?.delivery!=='verified')limitations.push('Incursion HTTP acceptance is not aircraft appearance or native ATC delivery proof');
+ if((op.scenarioId||'runway-change')==='runway-change'&&op.event?.delivery!=='verified')limitations.push('Incursion HTTP acceptance is not aircraft appearance or native ATC delivery proof');
+ if(op.scenarioId?.startsWith('weather-')&&result?.weatherAssessment?.eventDelivery!=='verified')limitations.push('Weather change at the aircraft was not verified; do not score model decision quality for this run');
+ if(op.scenarioId?.startsWith('weather-'))limitations.push('Selected-speed tracking is not a verified weight-dependent A330 VAPP calculation; stabilization gates are prototype policy, not certification');
  limitations.push('Same-host action allowlist is not an operating-system security boundary','Touchdown values are sampled at the configured interval, not exact per-frame contact values');
  if(!result)limitations.push('No final evaluated AI flight has been run');
- return {phase:op.phase,ready:op.ready,run:p,setupFailure:op.setupFailure,atc:op.atc,event:op.event,outcome:result?.outcome||op.outcome||null,objectives:corrected,records:{telemetry:samples.length,evaluation:evals.length,actions:actions.length,messages:messages.length,events:events.length},metrics,sourceFiles:checkProtected(),limitations};
+ return {phase:op.phase,ready:op.ready,run:p,scenarioId:op.scenarioId||'runway-change',setupFailure:op.setupFailure,atc:op.atc,event:op.event,weatherEvent:op.weatherEvent,weatherAssessment:result?.weatherAssessment||null,outcome:result?.outcome||op.outcome||null,objectives:corrected,records:{telemetry:samples.length,evaluation:evals.length,actions:actions.length,messages:messages.length,events:events.length},metrics,sourceFiles:checkProtected(),limitations};
 }
-async function main(){const op=args[0];if(op==='nav')return navData(args[1]||CFG.runway);if(op==='status')return status();if(op==='readiness')return readiness();if(op==='setup')return setup();if(op==='stabilize')return stabilize();if(op==='smoke-action')return smokeAction();if(op==='start')return start();if(op==='trigger')return trigger(args[1]);if(op==='scenario'&&args[1]==='runway-change')return applyRunwayChange();if(op==='clear')return trigger('clear');if(op==='pause'){await api.pause();return {paused:true};}if(op==='atc'){if(args[1]==='open'){await api.command('sim/operation/contact_atc');return {requested:true};}if(args[1]==='readback'){await api.command('sim/operation/atc_readback');return {requested:true};}return atcVerify();}if(op==='report')return report();throw Error('Usage: node scenario.mjs nav [RUNWAY]|setup [--sit PATH] [--reuse-loaded] [--stabilize]|stabilize|smoke-action ACTION [JSON_VALUE]|status|readiness|start [--no-scenario-event]|trigger arm|trigger execute|scenario runway-change|clear|atc open|atc readback|atc verify [--confirm-current-clearance]|pause|report [--config FILE]');}
+async function main(){const op=args[0];if(op==='nav')return navData(args[1]||CFG.runway);if(op==='status')return status();if(op==='readiness')return readiness();if(op==='setup')return setup();if(op==='stabilize')return stabilize();if(op==='smoke-action')return smokeAction();if(op==='start')return start();if(op==='trigger')return trigger(args[1]);if(op==='scenario'&&args[1]==='runway-change')return applyRunwayChange();if(op==='clear')return trigger('clear');if(op==='pause'){await api.pause();return {paused:true};}if(op==='atc'){if(args[1]==='open'){await api.command('sim/operation/contact_atc');return {requested:true};}if(args[1]==='readback'){await api.command('sim/operation/atc_readback');return {requested:true};}return atcVerify();}if(op==='report')return report();throw Error('Usage: node scenario.mjs nav [RUNWAY]|setup [--scenario runway-change|weather-mild|weather-challenge] [--sit PATH] [--reuse-loaded]|stabilize|smoke-action ACTION [JSON_VALUE]|status|readiness|start [--scenario ID] [--no-scenario-event]|trigger arm|trigger execute|scenario runway-change|clear|atc open|atc readback|atc verify [--confirm-current-clearance]|pause|report [--config FILE]');}
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url))main().then(x=>{if(x!==undefined)console.log(JSON.stringify(x,null,2));}).catch(e=>{console.error(JSON.stringify({error:e.message}));process.exitCode=1;});

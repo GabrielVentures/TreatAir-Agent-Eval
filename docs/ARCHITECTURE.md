@@ -5,7 +5,7 @@
 The harness has four cooperating layers:
 
 1. **X-Plane** supplies aircraft physics, instruments, autopilot behavior, navigation signals, and the visual environment.
-2. **The scenario controller** prepares the aircraft, schedules the hidden runway change, owns setup privileges, and records telemetry.
+2. **The scenario controller** prepares the aircraft, schedules the selected hidden event, owns setup and weather privileges, and records telemetry.
 3. **The agent gateway** exposes observations and a small, typed cockpit action surface over localhost. It keeps setup and event controls outside the evaluated agent.
 4. **The model loop and evaluator** choose actions, verify resulting state, record the trajectory, and calculate mission outcome and quality metrics.
 
@@ -25,7 +25,9 @@ The final approach uses the A330's native dual-channel autoland. FLARE and ROLLO
 
 ## Scenario flow
 
-The agent receives the generic mission to land at KPDX. A separate controller delivers a runway-change message during the approach. The agent must observe and acknowledge it, select the new navigation setup, configure the aircraft, establish the approach, and decide whether to continue or go around. The evaluator records the event timing and all subsequent actions.
+The agent receives the generic mission to land at KPDX. In the runway-reassignment profile, a separate controller delivers a new clearance. In the wind profiles, the controller changes regional weather and verifies the resulting wind at the aircraft before it reports delivery. The agent sees local wind, flight behavior and a routine weather report, but not the event schedule or target. The prompt and aircraft reference remain the same across profiles.
+
+The manageable wind profile keeps full physical landing completion separate from its approach-safety assessment at 1,000 and 500 ft. The challenge wind profile has a deliberately shorter goal: the changed wind must be verified at the aircraft, TOGA must be commanded while the aircraft is airborne and the event is active, and the aircraft must remain airborne in a sustained climb. A safe go-around below 500 ft can still succeed, but its decision altitude is recorded. The latter ends the run before a second approach. These gates are declared benchmark policy, not verified A330 operating limits. The selected speed is used only as a tracking reference because a weight-dependent VAPP is not yet available from the installed aircraft adapter.
 
 ## Evidence flow
 
@@ -33,4 +35,4 @@ Each run has separate JSONL logs for model decisions, agent actions, telemetry, 
 
 ## Deliberate omissions
 
-The current handover omits full takeoff-to-landing routing, weather variation, native ATC injection, reinforcement-learning training, multi-aircraft support, and real-flight certification. These are roadmap items rather than hidden promises.
+The current handover omits full takeoff-to-landing routing, native ATC injection, reinforcement-learning training, multi-aircraft support, and real-flight certification. The short weather challenge needs repeated fixed-setting and held-out-wind evaluations before its difficulty can be characterized. Complete missed-approach recovery and a second landing are separate future tests.

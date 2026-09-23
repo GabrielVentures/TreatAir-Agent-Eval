@@ -66,8 +66,16 @@ test('vertical-speed action uses the A330 FCU pull command',()=>{
 test('adapter does not choose a preset go-around trajectory and exposes native dual-channel autoland',()=>{
  assert.equal(ACTIONS.go_around,undefined);
  assert.throws(()=>validateAction({action:'go_around'}));
+ assert.equal(validateAction({action:'toga'}),ACTIONS.toga);
+ assert.equal(validateAction({action:'autopilot2_off'}),ACTIONS.autopilot2_off);
+ assert.match(ACTIONS.toga.description,/does not select a missed-approach heading, altitude or speed/);
  assert.match(ACTIONS.autopilot2.description,/localizer and glideslope are captured/);
  assert.match(ACTIONS.autopilot2.description,/does not directly arm FLARE or ROLLOUT/);
+});
+test('NAV course control includes both pilot and copilot receivers for dual-channel ILS',()=>{
+ assert.equal(ACTIONS.nav_course.refs.length,4);
+ assert.equal(actionOutcome({action:'nav_course',value:103},{nav1Course:103,nav2Course:103,nav1CopilotCourse:283,nav2CopilotCourse:283,hasCrashed:0}).status,'pending');
+ assert.equal(actionOutcome({action:'nav_course',value:103},{nav1Course:103,nav2Course:103,nav1CopilotCourse:103,nav2CopilotCourse:103,hasCrashed:0}).status,'satisfied');
 });
 test('all exposed cockpit tools have meaningful descriptions',()=>{
  for(const [name,a] of Object.entries(ACTIONS))assert.ok(a.description?.length>15,name);

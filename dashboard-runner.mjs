@@ -46,7 +46,7 @@ let scenario,agent;
 try{
  write({status:'starting',config:{model:config.model,reasoning:config.reasoning,backend:config.backend,contextNames:config.contextNames}});
  const started=Date.now();
- scenario=child('scenario',['scenario.mjs','start'],{});
+ scenario=child('scenario',['scenario.mjs','start','--scenario',config.scenarioId],{});
  await waitForAccess(started);
  const key=providerKey();
  const agentArgs=['flight-agent.mjs','--backend',config.backend,'--model',config.model,'--reasoning',config.reasoning,'--max-decisions',String(config.maxDecisions||80),'--max-post-wait-seconds','0','--guidance-file',config.guidanceFile,'--context-manifest',config.contextManifestFile];

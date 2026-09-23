@@ -46,6 +46,8 @@
         </details>
         <div class="setup-controls">
           <div class="loading-mode" id="loading-mode" role="note" aria-live="polite"></div>
+          <label class="situation-field">Scenario<select id="scenario"></select></label>
+          <p id="scenario-description" class="field-help"></p>
           <label class="situation-field">Situation<select id="situation"></select></label>
           <p id="situation-name" class="field-help"></p>
           <div class="setup-actions">
@@ -92,6 +94,7 @@
         <article class="panel observation-panel" data-view="flight" hidden>
           <div class="panel-title"><span class="index">B</span><div><h2>What it saw <small>observed flight</small></h2></div><span class="live-dot" id="live-dot"></span></div>
           <div class="instrument-grid" id="instruments"></div>
+          <p id="weather-event-status" class="field-help"></p>
           <details class="raw-observation"><summary>Compressed observation payload</summary><pre id="observation-json">No telemetry received.</pre></details>
         </article>
 
