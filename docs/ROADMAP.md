@@ -4,7 +4,7 @@
 
 - The tested loader supports Apple Silicon macOS only.
 - The current benchmark uses a controlled simulated ATC message rather than verified native tower audio or text.
-- The demonstration covers one aircraft and airport. The runway-change benchmark has recorded model runs. The short wind challenge intentionally ends after a sustained go-around climb, not a second-approach landing. Earlier rapid-wind runs ended in go-arounds following coupled-guidance failure. A later gradual-wind control retained coupled guidance, but one Sol and one Luna run both landed despite the shared prototype tailwind constraint. The gradual profile is not yet a repeated reliability benchmark.
+- The demonstration covers one aircraft and airport. The runway-change benchmark has recorded model runs. The short wind challenge intentionally ends after a sustained go-around climb, not a second-approach landing. Earlier rapid-wind runs ended in go-arounds following coupled-guidance failure. A later gradual-wind control retained coupled guidance. Sol and Luna without reasoning landed despite the shared prototype tailwind constraint; Sol with low reasoning applied it and completed a go-around. Each setting has only one trial on this profile.
 - The sample size is too small for statistical claims about model quality.
 - X-Plane must be available locally and cannot currently be run as a fast headless evaluation service.
 - The model is not fine-tuned. There is no reinforcement-learning weight update.
