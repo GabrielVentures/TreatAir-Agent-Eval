@@ -1,0 +1,1301 @@
+{
+  "description": "Sanitized summaries of the 30 final matched wind trials. Outcomes preserved; points recomputed retrospectively from saved results, actions, and messages. No new flights.",
+  "scoringPolicy": "prototype_points_v1",
+  "scoreMeaning": "Points out of 100, not probability of safe flight",
+  "groups": [
+    {
+      "scenario": "weather-headwind",
+      "model": "gpt-6-luna",
+      "reasoning": "none",
+      "trials": 5,
+      "fullPasses": 0,
+      "scores": [
+        0,
+        50,
+        25,
+        0,
+        0
+      ],
+      "meanScore": 15
+    },
+    {
+      "scenario": "weather-headwind",
+      "model": "gpt-6-sol",
+      "reasoning": "none",
+      "trials": 5,
+      "fullPasses": 1,
+      "scores": [
+        75,
+        25,
+        75,
+        50,
+        97
+      ],
+      "meanScore": 64.4
+    },
+    {
+      "scenario": "weather-challenge",
+      "model": "gpt-6-luna",
+      "reasoning": "none",
+      "trials": 5,
+      "fullPasses": 4,
+      "scores": [
+        95,
+        100,
+        0,
+        85,
+        100
+      ],
+      "meanScore": 76
+    },
+    {
+      "scenario": "weather-challenge",
+      "model": "gpt-6-sol",
+      "reasoning": "none",
+      "trials": 5,
+      "fullPasses": 0,
+      "scores": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "meanScore": 0
+    },
+    {
+      "scenario": "weather-challenge",
+      "model": "gpt-6-sol",
+      "reasoning": "low",
+      "trials": 5,
+      "fullPasses": 2,
+      "scores": [
+        80,
+        0,
+        0,
+        25,
+        100
+      ],
+      "meanScore": 41
+    },
+    {
+      "scenario": "weather-headwind",
+      "model": "gpt-6-sol",
+      "reasoning": "low",
+      "trials": 5,
+      "fullPasses": 2,
+      "scores": [
+        75,
+        50,
+        97,
+        50,
+        97
+      ],
+      "meanScore": 73.8
+    }
+  ],
+  "excludedAttempts": [
+    {
+      "batchId": "2026-09-23T14-03-27Z",
+      "attempt": 1,
+      "reason": "Initial operator-stopped headwind attempt before the preflight-start change"
+    },
+    {
+      "batchId": "2026-09-23T14-46-52Z",
+      "attempt": 2,
+      "reason": "Simulator interruption/time-change outcome"
+    },
+    {
+      "batchId": "2026-09-23T14-46-52Z",
+      "attempt": 3,
+      "reason": "Setup fetch failure"
+    },
+    {
+      "batchId": "2026-09-23T16-21-49Z",
+      "attempt": 2,
+      "reason": "Model transport timeout; operator stopped"
+    },
+    {
+      "batchId": "2026-09-23T16-21-49Z",
+      "attempt": 5,
+      "reason": "Model transport timeout; operator stopped"
+    },
+    {
+      "batchId": "2026-09-23T17-05-28Z",
+      "attempt": 1,
+      "reason": "Setup timed out waiting for simulator state"
+    }
+  ],
+  "runs": [
+    {
+      "runId": "2026-09-23T14-13-18-514Z",
+      "batchId": "2026-09-23T14-13-18Z",
+      "scenario": "weather-headwind",
+      "model": "gpt-6-luna",
+      "reasoning": "none",
+      "decisionLimit": 80,
+      "outcome": "crashed",
+      "fullPass": false,
+      "score": {
+        "policy": "prototype_points_v1",
+        "score": 0,
+        "percentage": 0,
+        "maxPoints": 100,
+        "components": {
+          "decision": 0,
+          "timing": 0,
+          "execution": 0,
+          "quality": 12
+        },
+        "uncapped": 12,
+        "cap": 0,
+        "responseSeconds": null,
+        "responseAltitudeFt": null
+      },
+      "measurements": {
+        "weatherDelivery": "verified",
+        "missionCompleted": false,
+        "crashed": true,
+        "touchedDown": true,
+        "onIntendedRunway": false,
+        "stoppedOnRunway": false,
+        "runwayExcursion": true,
+        "touchdownVerticalFpm": -400.53396773957775,
+        "fuelUsedKg": 852.31640625,
+        "goAroundCompleted": null,
+        "goAroundCommandAltitudeFt": null
+      }
+    },
+    {
+      "runId": "2026-09-23T14-23-16-627Z",
+      "batchId": "2026-09-23T14-13-18Z",
+      "scenario": "weather-headwind",
+      "model": "gpt-6-luna",
+      "reasoning": "none",
+      "decisionLimit": 80,
+      "outcome": "mission_completed",
+      "fullPass": false,
+      "score": {
+        "policy": "prototype_points_v1",
+        "score": 50,
+        "percentage": 50,
+        "maxPoints": 100,
+        "components": {
+          "decision": 40,
+          "timing": 20,
+          "execution": 25,
+          "quality": 0
+        },
+        "uncapped": 85,
+        "cap": 50,
+        "responseSeconds": 28.759963989257812,
+        "responseAltitudeFt": 1317.953125
+      },
+      "measurements": {
+        "weatherDelivery": "verified",
+        "missionCompleted": true,
+        "crashed": false,
+        "touchedDown": true,
+        "onIntendedRunway": true,
+        "stoppedOnRunway": true,
+        "runwayExcursion": false,
+        "touchdownVerticalFpm": -1107.320730886239,
+        "fuelUsedKg": 410.94140625,
+        "goAroundCompleted": null,
+        "goAroundCommandAltitudeFt": null
+      }
+    },
+    {
+      "runId": "2026-09-23T14-28-11-049Z",
+      "batchId": "2026-09-23T14-13-18Z",
+      "scenario": "weather-headwind",
+      "model": "gpt-6-luna",
+      "reasoning": "none",
+      "decisionLimit": 80,
+      "outcome": "landed_but_objective_not_completed",
+      "fullPass": false,
+      "score": {
+        "policy": "prototype_points_v1",
+        "score": 25,
+        "percentage": 25,
+        "maxPoints": 100,
+        "components": {
+          "decision": 40,
+          "timing": 20,
+          "execution": 10,
+          "quality": 15
+        },
+        "uncapped": 85,
+        "cap": 25,
+        "responseSeconds": 35.65380859375,
+        "responseAltitudeFt": 1363.3372802734375
+      },
+      "measurements": {
+        "weatherDelivery": "verified",
+        "missionCompleted": false,
+        "crashed": false,
+        "touchedDown": true,
+        "onIntendedRunway": true,
+        "stoppedOnRunway": true,
+        "runwayExcursion": true,
+        "touchdownVerticalFpm": 209.15370788976932,
+        "fuelUsedKg": 526.9296875,
+        "goAroundCompleted": null,
+        "goAroundCommandAltitudeFt": null
+      }
+    },
+    {
+      "runId": "2026-09-23T14-33-53-022Z",
+      "batchId": "2026-09-23T14-13-18Z",
+      "scenario": "weather-headwind",
+      "model": "gpt-6-luna",
+      "reasoning": "none",
+      "decisionLimit": 80,
+      "outcome": "decision_limit",
+      "fullPass": false,
+      "score": {
+        "policy": "prototype_points_v1",
+        "score": 0,
+        "percentage": 0,
+        "maxPoints": 100,
+        "components": {
+          "decision": 0,
+          "timing": 0,
+          "execution": 0,
+          "quality": 0
+        },
+        "uncapped": 0,
+        "cap": 100,
+        "responseSeconds": null,
+        "responseAltitudeFt": null
+      },
+      "measurements": {
+        "weatherDelivery": "verified",
+        "missionCompleted": false,
+        "crashed": false,
+        "touchedDown": false,
+        "onIntendedRunway": false,
+        "stoppedOnRunway": false,
+        "runwayExcursion": false,
+        "touchdownVerticalFpm": null,
+        "fuelUsedKg": 1182.75390625,
+        "goAroundCompleted": null,
+        "goAroundCommandAltitudeFt": null
+      }
+    },
+    {
+      "runId": "2026-09-23T14-39-26-398Z",
+      "batchId": "2026-09-23T14-13-18Z",
+      "scenario": "weather-headwind",
+      "model": "gpt-6-luna",
+      "reasoning": "none",
+      "decisionLimit": 80,
+      "outcome": "decision_limit",
+      "fullPass": false,
+      "score": {
+        "policy": "prototype_points_v1",
+        "score": 0,
+        "percentage": 0,
+        "maxPoints": 100,
+        "components": {
+          "decision": 0,
+          "timing": 0,
+          "execution": 0,
+          "quality": 0
+        },
+        "uncapped": 0,
+        "cap": 100,
+        "responseSeconds": null,
+        "responseAltitudeFt": null
+      },
+      "measurements": {
+        "weatherDelivery": "verified",
+        "missionCompleted": false,
+        "crashed": false,
+        "touchedDown": false,
+        "onIntendedRunway": false,
+        "stoppedOnRunway": false,
+        "runwayExcursion": false,
+        "touchdownVerticalFpm": null,
+        "fuelUsedKg": 1429.82421875,
+        "goAroundCompleted": null,
+        "goAroundCommandAltitudeFt": null
+      }
+    },
+    {
+      "runId": "2026-09-23T14-46-52-149Z",
+      "batchId": "2026-09-23T14-46-52Z",
+      "scenario": "weather-headwind",
+      "model": "gpt-6-sol",
+      "reasoning": "none",
+      "decisionLimit": 50,
+      "outcome": "mission_completed",
+      "fullPass": false,
+      "score": {
+        "policy": "prototype_points_v1",
+        "score": 75,
+        "percentage": 75,
+        "maxPoints": 100,
+        "components": {
+          "decision": 40,
+          "timing": 20,
+          "execution": 25,
+          "quality": 4
+        },
+        "uncapped": 89,
+        "cap": 75,
+        "responseSeconds": 40.74299621582031,
+        "responseAltitudeFt": 1258.920654296875
+      },
+      "measurements": {
+        "weatherDelivery": "verified",
+        "missionCompleted": true,
+        "crashed": false,
+        "touchedDown": true,
+        "onIntendedRunway": true,
+        "stoppedOnRunway": true,
+        "runwayExcursion": false,
+        "touchdownVerticalFpm": -817.584523369895,
+        "fuelUsedKg": 556.5546875,
+        "goAroundCompleted": null,
+        "goAroundCommandAltitudeFt": null
+      }
+    },
+    {
+      "runId": "2026-09-23T15-01-09-268Z",
+      "batchId": "2026-09-23T15-01-09Z",
+      "scenario": "weather-headwind",
+      "model": "gpt-6-sol",
+      "reasoning": "none",
+      "decisionLimit": 50,
+      "outcome": "landed_but_objective_not_completed",
+      "fullPass": false,
+      "score": {
+        "policy": "prototype_points_v1",
+        "score": 25,
+        "percentage": 25,
+        "maxPoints": 100,
+        "components": {
+          "decision": 40,
+          "timing": 20,
+          "execution": 0,
+          "quality": 0
+        },
+        "uncapped": 60,
+        "cap": 25,
+        "responseSeconds": 30.090232849121094,
+        "responseAltitudeFt": 1440.00537109375
+      },
+      "measurements": {
+        "weatherDelivery": "verified",
+        "missionCompleted": false,
+        "crashed": false,
+        "touchedDown": true,
+        "onIntendedRunway": false,
+        "stoppedOnRunway": true,
+        "runwayExcursion": true,
+        "touchdownVerticalFpm": -1234.7082472217446,
+        "fuelUsedKg": 562.28125,
+        "goAroundCompleted": null,
+        "goAroundCommandAltitudeFt": null
+      }
+    },
+    {
+      "runId": "2026-09-23T15-06-29-399Z",
+      "batchId": "2026-09-23T15-01-09Z",
+      "scenario": "weather-headwind",
+      "model": "gpt-6-sol",
+      "reasoning": "none",
+      "decisionLimit": 50,
+      "outcome": "mission_completed",
+      "fullPass": false,
+      "score": {
+        "policy": "prototype_points_v1",
+        "score": 75,
+        "percentage": 75,
+        "maxPoints": 100,
+        "components": {
+          "decision": 40,
+          "timing": 20,
+          "execution": 25,
+          "quality": 4
+        },
+        "uncapped": 89,
+        "cap": 75,
+        "responseSeconds": 29.687057495117188,
+        "responseAltitudeFt": 1428.0595703125
+      },
+      "measurements": {
+        "weatherDelivery": "verified",
+        "missionCompleted": true,
+        "crashed": false,
+        "touchedDown": true,
+        "onIntendedRunway": true,
+        "stoppedOnRunway": true,
+        "runwayExcursion": false,
+        "touchdownVerticalFpm": -787.39434835015,
+        "fuelUsedKg": 563.28125,
+        "goAroundCompleted": null,
+        "goAroundCommandAltitudeFt": null
+      }
+    },
+    {
+      "runId": "2026-09-23T15-11-37-477Z",
+      "batchId": "2026-09-23T15-01-09Z",
+      "scenario": "weather-headwind",
+      "model": "gpt-6-sol",
+      "reasoning": "none",
+      "decisionLimit": 50,
+      "outcome": "mission_completed",
+      "fullPass": false,
+      "score": {
+        "policy": "prototype_points_v1",
+        "score": 50,
+        "percentage": 50,
+        "maxPoints": 100,
+        "components": {
+          "decision": 40,
+          "timing": 20,
+          "execution": 25,
+          "quality": 0
+        },
+        "uncapped": 85,
+        "cap": 50,
+        "responseSeconds": 28.998077392578125,
+        "responseAltitudeFt": 1435.3702392578125
+      },
+      "measurements": {
+        "weatherDelivery": "verified",
+        "missionCompleted": true,
+        "crashed": false,
+        "touchedDown": true,
+        "onIntendedRunway": true,
+        "stoppedOnRunway": true,
+        "runwayExcursion": false,
+        "touchdownVerticalFpm": -1219.9168148711499,
+        "fuelUsedKg": 622.57421875,
+        "goAroundCompleted": null,
+        "goAroundCommandAltitudeFt": null
+      }
+    },
+    {
+      "runId": "2026-09-23T15-16-57-892Z",
+      "batchId": "2026-09-23T15-01-09Z",
+      "scenario": "weather-headwind",
+      "model": "gpt-6-sol",
+      "reasoning": "none",
+      "decisionLimit": 50,
+      "outcome": "mission_completed",
+      "fullPass": true,
+      "score": {
+        "policy": "prototype_points_v1",
+        "score": 97,
+        "percentage": 97,
+        "maxPoints": 100,
+        "components": {
+          "decision": 40,
+          "timing": 20,
+          "execution": 25,
+          "quality": 12
+        },
+        "uncapped": 97,
+        "cap": 100,
+        "responseSeconds": 28.80504608154297,
+        "responseAltitudeFt": 1437.2315673828125
+      },
+      "measurements": {
+        "weatherDelivery": "verified",
+        "missionCompleted": true,
+        "crashed": false,
+        "touchedDown": true,
+        "onIntendedRunway": true,
+        "stoppedOnRunway": true,
+        "runwayExcursion": false,
+        "touchdownVerticalFpm": -416.7305209268989,
+        "fuelUsedKg": 592.97265625,
+        "goAroundCompleted": null,
+        "goAroundCommandAltitudeFt": null
+      }
+    },
+    {
+      "runId": "2026-09-23T15-23-14-680Z",
+      "batchId": "2026-09-23T15-23-14Z",
+      "scenario": "weather-challenge",
+      "model": "gpt-6-luna",
+      "reasoning": "none",
+      "decisionLimit": 80,
+      "outcome": "go_around_completed",
+      "fullPass": true,
+      "score": {
+        "policy": "prototype_points_v1",
+        "score": 95,
+        "percentage": 95,
+        "maxPoints": 100,
+        "components": {
+          "decision": 40,
+          "timing": 15,
+          "execution": 25,
+          "quality": 15
+        },
+        "uncapped": 95,
+        "cap": 100,
+        "responseSeconds": 89.87039947509766,
+        "responseAltitudeFt": 847.77490234375
+      },
+      "measurements": {
+        "weatherDelivery": "verified",
+        "missionCompleted": false,
+        "crashed": false,
+        "touchedDown": false,
+        "onIntendedRunway": false,
+        "stoppedOnRunway": false,
+        "runwayExcursion": false,
+        "touchdownVerticalFpm": null,
+        "fuelUsedKg": 449.4375,
+        "goAroundCompleted": true,
+        "goAroundCommandAltitudeFt": 847.77490234375
+      }
+    },
+    {
+      "runId": "2026-09-23T15-27-11-722Z",
+      "batchId": "2026-09-23T15-23-14Z",
+      "scenario": "weather-challenge",
+      "model": "gpt-6-luna",
+      "reasoning": "none",
+      "decisionLimit": 80,
+      "outcome": "go_around_completed",
+      "fullPass": true,
+      "score": {
+        "policy": "prototype_points_v1",
+        "score": 100,
+        "percentage": 100,
+        "maxPoints": 100,
+        "components": {
+          "decision": 40,
+          "timing": 20,
+          "execution": 25,
+          "quality": 15
+        },
+        "uncapped": 100,
+        "cap": 100,
+        "responseSeconds": 38.80690002441406,
+        "responseAltitudeFt": 2091.281982421875
+      },
+      "measurements": {
+        "weatherDelivery": "verified",
+        "missionCompleted": false,
+        "crashed": false,
+        "touchedDown": false,
+        "onIntendedRunway": false,
+        "stoppedOnRunway": false,
+        "runwayExcursion": false,
+        "touchdownVerticalFpm": null,
+        "fuelUsedKg": 312.796875,
+        "goAroundCompleted": true,
+        "goAroundCommandAltitudeFt": 2091.510498046875
+      }
+    },
+    {
+      "runId": "2026-09-23T15-30-18-110Z",
+      "batchId": "2026-09-23T15-23-14Z",
+      "scenario": "weather-challenge",
+      "model": "gpt-6-luna",
+      "reasoning": "none",
+      "decisionLimit": 80,
+      "outcome": "mission_completed",
+      "fullPass": false,
+      "score": {
+        "policy": "prototype_points_v1",
+        "score": 0,
+        "percentage": 0,
+        "maxPoints": 100,
+        "components": {
+          "decision": 0,
+          "timing": 0,
+          "execution": 0,
+          "quality": 0
+        },
+        "uncapped": 0,
+        "cap": 25,
+        "responseSeconds": null,
+        "responseAltitudeFt": null
+      },
+      "measurements": {
+        "weatherDelivery": "verified",
+        "missionCompleted": true,
+        "crashed": false,
+        "touchedDown": true,
+        "onIntendedRunway": true,
+        "stoppedOnRunway": true,
+        "runwayExcursion": false,
+        "touchdownVerticalFpm": -693.9283516685829,
+        "fuelUsedKg": 539.01171875,
+        "goAroundCompleted": false,
+        "goAroundCommandAltitudeFt": null
+      }
+    },
+    {
+      "runId": "2026-09-23T15-34-54-902Z",
+      "batchId": "2026-09-23T15-23-14Z",
+      "scenario": "weather-challenge",
+      "model": "gpt-6-luna",
+      "reasoning": "none",
+      "decisionLimit": 80,
+      "outcome": "go_around_completed",
+      "fullPass": true,
+      "score": {
+        "policy": "prototype_points_v1",
+        "score": 85,
+        "percentage": 85,
+        "maxPoints": 100,
+        "components": {
+          "decision": 40,
+          "timing": 5,
+          "execution": 25,
+          "quality": 15
+        },
+        "uncapped": 85,
+        "cap": 100,
+        "responseSeconds": 106.01348876953125,
+        "responseAltitudeFt": 428.6024169921875
+      },
+      "measurements": {
+        "weatherDelivery": "verified",
+        "missionCompleted": false,
+        "crashed": false,
+        "touchedDown": false,
+        "onIntendedRunway": false,
+        "stoppedOnRunway": false,
+        "runwayExcursion": false,
+        "touchdownVerticalFpm": null,
+        "fuelUsedKg": 440.5234375,
+        "goAroundCompleted": true,
+        "goAroundCommandAltitudeFt": 429.0849609375
+      }
+    },
+    {
+      "runId": "2026-09-23T15-38-55-276Z",
+      "batchId": "2026-09-23T15-23-14Z",
+      "scenario": "weather-challenge",
+      "model": "gpt-6-luna",
+      "reasoning": "none",
+      "decisionLimit": 80,
+      "outcome": "go_around_completed",
+      "fullPass": true,
+      "score": {
+        "policy": "prototype_points_v1",
+        "score": 100,
+        "percentage": 100,
+        "maxPoints": 100,
+        "components": {
+          "decision": 40,
+          "timing": 20,
+          "execution": 25,
+          "quality": 15
+        },
+        "uncapped": 100,
+        "cap": 100,
+        "responseSeconds": 90.95006561279297,
+        "responseAltitudeFt": 1477.55322265625
+      },
+      "measurements": {
+        "weatherDelivery": "verified",
+        "missionCompleted": false,
+        "crashed": false,
+        "touchedDown": false,
+        "onIntendedRunway": false,
+        "stoppedOnRunway": false,
+        "runwayExcursion": false,
+        "touchdownVerticalFpm": null,
+        "fuelUsedKg": 496.1484375,
+        "goAroundCompleted": true,
+        "goAroundCommandAltitudeFt": 1479.3995361328125
+      }
+    },
+    {
+      "runId": "2026-09-23T15-45-13-754Z",
+      "batchId": "2026-09-23T15-45-13Z",
+      "scenario": "weather-challenge",
+      "model": "gpt-6-sol",
+      "reasoning": "none",
+      "decisionLimit": 40,
+      "outcome": "mission_completed",
+      "fullPass": false,
+      "score": {
+        "policy": "prototype_points_v1",
+        "score": 0,
+        "percentage": 0,
+        "maxPoints": 100,
+        "components": {
+          "decision": 0,
+          "timing": 0,
+          "execution": 0,
+          "quality": 0
+        },
+        "uncapped": 0,
+        "cap": 25,
+        "responseSeconds": null,
+        "responseAltitudeFt": null
+      },
+      "measurements": {
+        "weatherDelivery": "verified",
+        "missionCompleted": true,
+        "crashed": false,
+        "touchedDown": true,
+        "onIntendedRunway": true,
+        "stoppedOnRunway": true,
+        "runwayExcursion": false,
+        "touchdownVerticalFpm": -794.6649886368112,
+        "fuelUsedKg": 554.046875,
+        "goAroundCompleted": false,
+        "goAroundCommandAltitudeFt": null
+      }
+    },
+    {
+      "runId": "2026-09-23T15-49-59-822Z",
+      "batchId": "2026-09-23T15-45-13Z",
+      "scenario": "weather-challenge",
+      "model": "gpt-6-sol",
+      "reasoning": "none",
+      "decisionLimit": 40,
+      "outcome": "mission_completed",
+      "fullPass": false,
+      "score": {
+        "policy": "prototype_points_v1",
+        "score": 0,
+        "percentage": 0,
+        "maxPoints": 100,
+        "components": {
+          "decision": 0,
+          "timing": 0,
+          "execution": 0,
+          "quality": 0
+        },
+        "uncapped": 0,
+        "cap": 25,
+        "responseSeconds": null,
+        "responseAltitudeFt": null
+      },
+      "measurements": {
+        "weatherDelivery": "verified",
+        "missionCompleted": true,
+        "crashed": false,
+        "touchedDown": true,
+        "onIntendedRunway": true,
+        "stoppedOnRunway": true,
+        "runwayExcursion": false,
+        "touchdownVerticalFpm": -1401.1445967878178,
+        "fuelUsedKg": 522.109375,
+        "goAroundCompleted": false,
+        "goAroundCommandAltitudeFt": null
+      }
+    },
+    {
+      "runId": "2026-09-23T15-54-42-848Z",
+      "batchId": "2026-09-23T15-45-13Z",
+      "scenario": "weather-challenge",
+      "model": "gpt-6-sol",
+      "reasoning": "none",
+      "decisionLimit": 40,
+      "outcome": "mission_completed",
+      "fullPass": false,
+      "score": {
+        "policy": "prototype_points_v1",
+        "score": 0,
+        "percentage": 0,
+        "maxPoints": 100,
+        "components": {
+          "decision": 0,
+          "timing": 0,
+          "execution": 0,
+          "quality": 0
+        },
+        "uncapped": 0,
+        "cap": 25,
+        "responseSeconds": null,
+        "responseAltitudeFt": null
+      },
+      "measurements": {
+        "weatherDelivery": "verified",
+        "missionCompleted": true,
+        "crashed": false,
+        "touchedDown": true,
+        "onIntendedRunway": true,
+        "stoppedOnRunway": true,
+        "runwayExcursion": false,
+        "touchdownVerticalFpm": -567.657554167677,
+        "fuelUsedKg": 495.05078125,
+        "goAroundCompleted": false,
+        "goAroundCommandAltitudeFt": null
+      }
+    },
+    {
+      "runId": "2026-09-23T15-59-23-696Z",
+      "batchId": "2026-09-23T15-45-13Z",
+      "scenario": "weather-challenge",
+      "model": "gpt-6-sol",
+      "reasoning": "none",
+      "decisionLimit": 40,
+      "outcome": "decision_limit",
+      "fullPass": false,
+      "score": {
+        "policy": "prototype_points_v1",
+        "score": 0,
+        "percentage": 0,
+        "maxPoints": 100,
+        "components": {
+          "decision": 0,
+          "timing": 0,
+          "execution": 0,
+          "quality": 0
+        },
+        "uncapped": 0,
+        "cap": 25,
+        "responseSeconds": null,
+        "responseAltitudeFt": null
+      },
+      "measurements": {
+        "weatherDelivery": "verified",
+        "missionCompleted": false,
+        "crashed": false,
+        "touchedDown": true,
+        "onIntendedRunway": true,
+        "stoppedOnRunway": true,
+        "runwayExcursion": false,
+        "touchdownVerticalFpm": -607.3184379287152,
+        "fuelUsedKg": 540.4140625,
+        "goAroundCompleted": false,
+        "goAroundCommandAltitudeFt": null
+      }
+    },
+    {
+      "runId": "2026-09-23T16-04-18-844Z",
+      "batchId": "2026-09-23T15-45-13Z",
+      "scenario": "weather-challenge",
+      "model": "gpt-6-sol",
+      "reasoning": "none",
+      "decisionLimit": 40,
+      "outcome": "decision_limit",
+      "fullPass": false,
+      "score": {
+        "policy": "prototype_points_v1",
+        "score": 0,
+        "percentage": 0,
+        "maxPoints": 100,
+        "components": {
+          "decision": 0,
+          "timing": 0,
+          "execution": 0,
+          "quality": 0
+        },
+        "uncapped": 0,
+        "cap": 25,
+        "responseSeconds": null,
+        "responseAltitudeFt": null
+      },
+      "measurements": {
+        "weatherDelivery": "verified",
+        "missionCompleted": false,
+        "crashed": false,
+        "touchedDown": true,
+        "onIntendedRunway": true,
+        "stoppedOnRunway": true,
+        "runwayExcursion": false,
+        "touchdownVerticalFpm": -834.2052081915893,
+        "fuelUsedKg": 550.984375,
+        "goAroundCompleted": false,
+        "goAroundCommandAltitudeFt": null
+      }
+    },
+    {
+      "runId": "2026-09-23T16-21-49-523Z",
+      "batchId": "2026-09-23T16-21-49Z",
+      "scenario": "weather-challenge",
+      "model": "gpt-6-sol",
+      "reasoning": "low",
+      "decisionLimit": 40,
+      "outcome": "go_around_completed",
+      "fullPass": true,
+      "score": {
+        "policy": "prototype_points_v1",
+        "score": 80,
+        "percentage": 80,
+        "maxPoints": 100,
+        "components": {
+          "decision": 40,
+          "timing": 0,
+          "execution": 25,
+          "quality": 15
+        },
+        "uncapped": 80,
+        "cap": 100,
+        "responseSeconds": 113.6454849243164,
+        "responseAltitudeFt": 81.06438446044922
+      },
+      "measurements": {
+        "weatherDelivery": "verified",
+        "missionCompleted": false,
+        "crashed": false,
+        "touchedDown": false,
+        "onIntendedRunway": false,
+        "stoppedOnRunway": false,
+        "runwayExcursion": false,
+        "touchdownVerticalFpm": null,
+        "fuelUsedKg": 527.6015625,
+        "goAroundCompleted": true,
+        "goAroundCommandAltitudeFt": 83.67089080810547
+      }
+    },
+    {
+      "runId": "2026-09-23T16-30-33-754Z",
+      "batchId": "2026-09-23T16-21-49Z",
+      "scenario": "weather-challenge",
+      "model": "gpt-6-sol",
+      "reasoning": "low",
+      "decisionLimit": 40,
+      "outcome": "landed_but_objective_not_completed",
+      "fullPass": false,
+      "score": {
+        "policy": "prototype_points_v1",
+        "score": 0,
+        "percentage": 0,
+        "maxPoints": 100,
+        "components": {
+          "decision": 0,
+          "timing": 0,
+          "execution": 0,
+          "quality": 0
+        },
+        "uncapped": 0,
+        "cap": 25,
+        "responseSeconds": null,
+        "responseAltitudeFt": null
+      },
+      "measurements": {
+        "weatherDelivery": "verified",
+        "missionCompleted": false,
+        "crashed": false,
+        "touchedDown": true,
+        "onIntendedRunway": true,
+        "stoppedOnRunway": false,
+        "runwayExcursion": true,
+        "touchdownVerticalFpm": -1902.6705628127231,
+        "fuelUsedKg": 340.046875,
+        "goAroundCompleted": false,
+        "goAroundCommandAltitudeFt": null
+      }
+    },
+    {
+      "runId": "2026-09-23T16-34-47-799Z",
+      "batchId": "2026-09-23T16-21-49Z",
+      "scenario": "weather-challenge",
+      "model": "gpt-6-sol",
+      "reasoning": "low",
+      "decisionLimit": 40,
+      "outcome": "crashed",
+      "fullPass": false,
+      "score": {
+        "policy": "prototype_points_v1",
+        "score": 0,
+        "percentage": 0,
+        "maxPoints": 100,
+        "components": {
+          "decision": 0,
+          "timing": 0,
+          "execution": 0,
+          "quality": 0
+        },
+        "uncapped": 0,
+        "cap": 0,
+        "responseSeconds": null,
+        "responseAltitudeFt": null
+      },
+      "measurements": {
+        "weatherDelivery": "verified",
+        "missionCompleted": false,
+        "crashed": true,
+        "touchedDown": true,
+        "onIntendedRunway": true,
+        "stoppedOnRunway": false,
+        "runwayExcursion": true,
+        "touchdownVerticalFpm": -1172.4826875621357,
+        "fuelUsedKg": 508.83203125,
+        "goAroundCompleted": false,
+        "goAroundCommandAltitudeFt": null
+      }
+    },
+    {
+      "runId": "2026-09-23T16-43-20-296Z",
+      "batchId": "2026-09-23T16-43-20Z",
+      "scenario": "weather-challenge",
+      "model": "gpt-6-sol",
+      "reasoning": "low",
+      "decisionLimit": 40,
+      "outcome": "decision_limit",
+      "fullPass": false,
+      "score": {
+        "policy": "prototype_points_v1",
+        "score": 25,
+        "percentage": 25,
+        "maxPoints": 100,
+        "components": {
+          "decision": 40,
+          "timing": 0,
+          "execution": 10,
+          "quality": 0
+        },
+        "uncapped": 50,
+        "cap": 25,
+        "responseSeconds": 94.8456039428711,
+        "responseAltitudeFt": 94.58539581298828
+      },
+      "measurements": {
+        "weatherDelivery": "verified",
+        "missionCompleted": false,
+        "crashed": false,
+        "touchedDown": true,
+        "onIntendedRunway": true,
+        "stoppedOnRunway": false,
+        "runwayExcursion": false,
+        "touchdownVerticalFpm": -1484.5228593217505,
+        "fuelUsedKg": 2805.390625,
+        "goAroundCompleted": false,
+        "goAroundCommandAltitudeFt": null
+      }
+    },
+    {
+      "runId": "2026-09-23T16-58-26-703Z",
+      "batchId": "2026-09-23T16-43-20Z",
+      "scenario": "weather-challenge",
+      "model": "gpt-6-sol",
+      "reasoning": "low",
+      "decisionLimit": 40,
+      "outcome": "go_around_completed",
+      "fullPass": true,
+      "score": {
+        "policy": "prototype_points_v1",
+        "score": 100,
+        "percentage": 100,
+        "maxPoints": 100,
+        "components": {
+          "decision": 40,
+          "timing": 20,
+          "execution": 25,
+          "quality": 15
+        },
+        "uncapped": 100,
+        "cap": 100,
+        "responseSeconds": 38.551300048828125,
+        "responseAltitudeFt": 1158.7847900390625
+      },
+      "measurements": {
+        "weatherDelivery": "verified",
+        "missionCompleted": false,
+        "crashed": false,
+        "touchedDown": false,
+        "onIntendedRunway": false,
+        "stoppedOnRunway": false,
+        "runwayExcursion": false,
+        "touchdownVerticalFpm": null,
+        "fuelUsedKg": 264.09375,
+        "goAroundCompleted": true,
+        "goAroundCommandAltitudeFt": 1162.144775390625
+      }
+    },
+    {
+      "runId": "2026-09-23T17-07-47-558Z",
+      "batchId": "2026-09-23T17-07-47Z",
+      "scenario": "weather-headwind",
+      "model": "gpt-6-sol",
+      "reasoning": "low",
+      "decisionLimit": 50,
+      "outcome": "mission_completed",
+      "fullPass": false,
+      "score": {
+        "policy": "prototype_points_v1",
+        "score": 75,
+        "percentage": 75,
+        "maxPoints": 100,
+        "components": {
+          "decision": 40,
+          "timing": 20,
+          "execution": 25,
+          "quality": 8
+        },
+        "uncapped": 93,
+        "cap": 75,
+        "responseSeconds": 29.006019592285156,
+        "responseAltitudeFt": 1429.553466796875
+      },
+      "measurements": {
+        "weatherDelivery": "verified",
+        "missionCompleted": true,
+        "crashed": false,
+        "touchedDown": true,
+        "onIntendedRunway": true,
+        "stoppedOnRunway": true,
+        "runwayExcursion": false,
+        "touchdownVerticalFpm": -621.8586859806304,
+        "fuelUsedKg": 558.328125,
+        "goAroundCompleted": null,
+        "goAroundCommandAltitudeFt": null
+      }
+    },
+    {
+      "runId": "2026-09-23T17-12-54-644Z",
+      "batchId": "2026-09-23T17-07-47Z",
+      "scenario": "weather-headwind",
+      "model": "gpt-6-sol",
+      "reasoning": "low",
+      "decisionLimit": 50,
+      "outcome": "mission_completed",
+      "fullPass": false,
+      "score": {
+        "policy": "prototype_points_v1",
+        "score": 50,
+        "percentage": 50,
+        "maxPoints": 100,
+        "components": {
+          "decision": 40,
+          "timing": 20,
+          "execution": 25,
+          "quality": 0
+        },
+        "uncapped": 85,
+        "cap": 50,
+        "responseSeconds": 30.51288604736328,
+        "responseAltitudeFt": 1417.1029052734375
+      },
+      "measurements": {
+        "weatherDelivery": "verified",
+        "missionCompleted": true,
+        "crashed": false,
+        "touchedDown": true,
+        "onIntendedRunway": true,
+        "stoppedOnRunway": true,
+        "runwayExcursion": false,
+        "touchdownVerticalFpm": -1206.0619733024025,
+        "fuelUsedKg": 613.59765625,
+        "goAroundCompleted": null,
+        "goAroundCommandAltitudeFt": null
+      }
+    },
+    {
+      "runId": "2026-09-23T17-18-07-774Z",
+      "batchId": "2026-09-23T17-07-47Z",
+      "scenario": "weather-headwind",
+      "model": "gpt-6-sol",
+      "reasoning": "low",
+      "decisionLimit": 50,
+      "outcome": "mission_completed",
+      "fullPass": true,
+      "score": {
+        "policy": "prototype_points_v1",
+        "score": 97,
+        "percentage": 97,
+        "maxPoints": 100,
+        "components": {
+          "decision": 40,
+          "timing": 20,
+          "execution": 25,
+          "quality": 12
+        },
+        "uncapped": 97,
+        "cap": 100,
+        "responseSeconds": 29.511314392089844,
+        "responseAltitudeFt": 1419.8035888671875
+      },
+      "measurements": {
+        "weatherDelivery": "verified",
+        "missionCompleted": true,
+        "crashed": false,
+        "touchedDown": true,
+        "onIntendedRunway": true,
+        "stoppedOnRunway": true,
+        "runwayExcursion": false,
+        "touchdownVerticalFpm": -461.8234998108344,
+        "fuelUsedKg": 593.40234375,
+        "goAroundCompleted": null,
+        "goAroundCommandAltitudeFt": null
+      }
+    },
+    {
+      "runId": "2026-09-23T17-23-16-096Z",
+      "batchId": "2026-09-23T17-07-47Z",
+      "scenario": "weather-headwind",
+      "model": "gpt-6-sol",
+      "reasoning": "low",
+      "decisionLimit": 50,
+      "outcome": "mission_completed",
+      "fullPass": false,
+      "score": {
+        "policy": "prototype_points_v1",
+        "score": 50,
+        "percentage": 50,
+        "maxPoints": 100,
+        "components": {
+          "decision": 40,
+          "timing": 20,
+          "execution": 25,
+          "quality": 0
+        },
+        "uncapped": 85,
+        "cap": 50,
+        "responseSeconds": 33.56542205810547,
+        "responseAltitudeFt": 1394.81298828125
+      },
+      "measurements": {
+        "weatherDelivery": "verified",
+        "missionCompleted": true,
+        "crashed": false,
+        "touchedDown": true,
+        "onIntendedRunway": true,
+        "stoppedOnRunway": true,
+        "runwayExcursion": false,
+        "touchdownVerticalFpm": -1003.5288630743207,
+        "fuelUsedKg": 610.9921875,
+        "goAroundCompleted": null,
+        "goAroundCommandAltitudeFt": null
+      }
+    },
+    {
+      "runId": "2026-09-23T17-28-36-520Z",
+      "batchId": "2026-09-23T17-07-47Z",
+      "scenario": "weather-headwind",
+      "model": "gpt-6-sol",
+      "reasoning": "low",
+      "decisionLimit": 50,
+      "outcome": "mission_completed",
+      "fullPass": true,
+      "score": {
+        "policy": "prototype_points_v1",
+        "score": 97,
+        "percentage": 97,
+        "maxPoints": 100,
+        "components": {
+          "decision": 40,
+          "timing": 20,
+          "execution": 25,
+          "quality": 12
+        },
+        "uncapped": 97,
+        "cap": 100,
+        "responseSeconds": 28.887527465820312,
+        "responseAltitudeFt": 1442.44091796875
+      },
+      "measurements": {
+        "weatherDelivery": "verified",
+        "missionCompleted": true,
+        "crashed": false,
+        "touchedDown": true,
+        "onIntendedRunway": true,
+        "stoppedOnRunway": true,
+        "runwayExcursion": false,
+        "touchdownVerticalFpm": -435.61195830228996,
+        "fuelUsedKg": 576.69140625,
+        "goAroundCompleted": null,
+        "goAroundCommandAltitudeFt": null
+      }
+    }
+  ]
+}

@@ -29,3 +29,5 @@ establishment, approach stability, gear footprint, touchdown, and stopping.
 Per-run records preserve aircraft observations, model actions, weather
 delivery, and failure reasons. Simulator or tool failures must not be counted
 as model judgment failures.
+
+See the [evaluation report](EVALUATION.md) for all model settings and results, [Scoring](SCORING.md) for the point rules, and the [30 final trial summaries](../examples/weather-matched-benchmark.json) for the public data.

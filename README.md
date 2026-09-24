@@ -2,7 +2,7 @@
 
 An experimental deployment and evaluation system for tool-using AI agents. It connects a language model to X-Plane through a restricted cockpit action layer, introduces a controlled change during an approach, records the resulting trajectory, and scores whether the agent completes the task safely.
 
-The demonstration uses an Airbus A330 approaching Portland International Airport. The agent starts with a normal instruction to land at KPDX. One benchmark delivers a new runway clearance during the approach. A second, exploratory benchmark changes the approach wind. Its matched episodes test two different decisions: go around when a strong tailwind develops, or continue a safe approach when the same wind speed comes from a favorable direction. The episodes are separate flights, not a full missed-approach circuit. In five GPT-6 Sol low-reasoning trials per episode, 2/5 passed the tailwind objective and 2/5 passed the headwind landing-quality objective. See the evaluation report for the physical outcomes and limitations.
+The demonstration uses an Airbus A330 approaching Portland International Airport. The agent starts with a normal instruction to land at KPDX. One benchmark delivers a new runway clearance during the approach. A second changes the approach wind: one episode requires a go-around in excessive tailwind, while the other requires a landing with equally strong favorable wind. These are separate flights. The [evaluation report](docs/EVALUATION.md) covers ten runway trials and thirty wind trials, including no-reasoning and low-reasoning model settings.
 
 The aviation setting is a concrete testbed for a broader deployment problem: how to move from a capable model demonstration to an agent workflow that is observable, constrained, repeatable, and measurable when the environment changes.
 
@@ -36,7 +36,7 @@ The tested automatic loader is for Apple Silicon macOS. On other platforms, the 
 
 ## Review without running X-Plane
 
-The repository includes sanitized sample outcomes in [examples](examples) and the measured experiment report in [docs/EVALUATION.md](docs/EVALUATION.md). These show a complete successful runway-change landing, a runway-excursion failure, and an established go-around after a measured wind shift.
+The repository includes [all 30 final wind trial summaries](examples/weather-matched-benchmark.json), [selected runway and calibration examples](examples/README.md), and the [evaluation report](docs/EVALUATION.md). The summaries preserve outcomes, scores, and selected measurements without requiring a simulator or paid model call.
 
 [docs/DEMO.md](docs/DEMO.md) explains how to reproduce the live walkthrough and what to record for a short demonstration video. A reviewer can understand the system and inspect the evidence without an API key or simulator installation.
 
@@ -45,15 +45,28 @@ The repository includes sanitized sample outcomes in [examples](examples) and th
 - [QUICKSTART.md](QUICKSTART.md): installation, configuration, and operator flow.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): system boundaries, tools, observations, and data flow.
 - [docs/EVALUATION.md](docs/EVALUATION.md): experiment design, measurements, results, and failure analysis.
+- [docs/SCORING.md](docs/SCORING.md): point allocation, timing bands, and safety caps.
+- [docs/WEATHER-PAIR.md](docs/WEATHER-PAIR.md): matched tailwind and headwind episode specification.
 - [docs/ROADMAP.md](docs/ROADMAP.md): limitations and next experiments.
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md): approximate effort and development decisions.
 - [CREDITS.md](CREDITS.md): AI assistance, reused components, and collaboration disclosure.
 
 ## Current status
 
-In the selected runway-change runs, GPT-5.6 Sol completed **5 of 5** missions and GPT-5.6 Luna completed **1 of 5**. Their retrospective prototype scores averaged **100/100** and **60/100**, respectively. In the separate changing-wind benchmark, GPT-6 Sol with low reasoning passed **2 of 5** tailwind trials and **2 of 5** headwind trials, scoring averages of **41/100** and **73.8/100**. The points reflect decision, timing, execution and safety severity; they are not probabilities of safe flight. These small exploratory samples are not reliability estimates. See the [evaluation report](docs/EVALUATION.md) for per-run results, scoring rules and limitations.
+| Experiment | Model and reasoning | Full passes | Mean points |
+|---|---|---:|---:|
+| Runway reassignment | GPT-5.6 Sol, none | 5/5 | 100/100 |
+| Runway reassignment | GPT-5.6 Luna, none | 1/5 | 60/100 |
+| Tailwind go-around | GPT-6 Luna, none | 4/5 | 76/100 |
+| Tailwind go-around | GPT-6 Sol, none | 0/5 | 0/100 |
+| Tailwind go-around | GPT-6 Sol, low | 2/5 | 41/100 |
+| Headwind landing | GPT-6 Luna, none | 0/5 | 15/100 |
+| Headwind landing | GPT-6 Sol, none | 1/5 | 64.4/100 |
+| Headwind landing | GPT-6 Sol, low | 2/5 | 73.8/100 |
 
-This is a proof of concept, not a certified flight system. The demonstrated scenario is intentionally narrow. Recent no-reasoning API trials completed the task with both Sol and Luna under some runs, while Luna also showed repeated decision-limit and rollout failures. The evidence is useful for studying agent reliability and tool design, not for claiming production autonomy.
+Points reflect decision, timing, execution, and quality, with caps for unsafe outcomes. They are not probabilities of safe flight. Luna's completed tailwind go-arounds cited approach instability, so those passes do not establish correct wind calculation. See the [evaluation report](docs/EVALUATION.md) for interpretation, decision budgets, and per-run outcomes.
+
+This is a small simulator proof of concept, not a certified flight system or a reliability estimate. The full go-around circuit and second landing were explored but remain unverified; splitting the weather task allowed repeated testing within the project schedule.
 
 The project does not perform reinforcement-learning weight updates. It provides the pieces that a future RL or agent-evaluation task would need: an environment, observations, actions, trajectories, scenario events, objective measurements, and failure labels.
 

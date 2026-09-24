@@ -34,9 +34,19 @@ The path is stored only in `.state/local-config.json`, which is ignored by Git. 
 
 On Apple Silicon macOS, use **Load & prepare** in the dashboard. The harness launches X-Plane, waits through any demo screens, loads the bundled situation, configures the aircraft, reapplies pause after initialization, and verifies the handoff. If the demo screens appear, click **Use Demo** and then **Understood**.
 
-Choose the scenario before preparation. **Runway reassignment** is the original benchmark. The two **Changing wind** profiles use a KPDX 10R approach and the same initial mission, but establish a static starting wind and introduce a physical wind change during final approach. These profiles require X-Plane's static/preset weather rather than Real Weather. The dashboard reports whether the new wind was actually measured at the aircraft; an unverified event is not a valid agent comparison.
+Choose the scenario before preparation:
 
-After the wind ramp, the new conditions hold for 120 simulation seconds, then return to the baseline over 30 seconds. This schedule does not depend on the agent's decisions and is not included in its observations. The agent sees measured wind and ordinary weather updates. The shared aircraft reference contains the prototype operating limits. **Changing wind · manageable** retains a full landing objective. **Changing wind · go-around decision** is a shorter benchmark that ends after a verified, sustained safe climb following the wind change; a second landing is not required in that profile.
+| Dashboard choice | Scenario ID | Objective |
+|---|---|---|
+| Runway reassignment | `runway-change` | Adapt from runway 28R to 28L and land |
+| Changing wind · tailwind go-around | `weather-challenge` | Reject the landing and establish a sustained climb |
+| Changing wind · headwind landing | `weather-headwind` | Land and stop in favorable wind of the same strength |
+
+The two matched wind episodes use a KPDX 10R approach, an 8 kt initial headwind, and static/preset weather rather than Real Weather. Wind changes to 25 kt over 25 simulation seconds when the aircraft reaches 5.5 NM. The new conditions remain in place for the episode; they do not return to baseline during these runs. Prepare a new flight between episodes. The controller restores the original weather settings after evaluation ends.
+
+The dashboard reports whether the new wind was actually measured at the aircraft. An unverified event is not a valid agent comparison. The model receives measured wind and ordinary weather updates, plus the shared aircraft reference, without the event schedule or expected decision. See [the matched episode specification](docs/WEATHER-PAIR.md).
+
+**Changing wind · manageable** (`weather-mild`) is an additional calibration profile, outside the reported matched benchmark. It uses a moderate change, then restores baseline wind after a 120-second hold and a 30-second recovery ramp.
 
 On Windows, Linux, or another system without the bundled native loader, use the manual path shown in the dashboard:
 
@@ -94,7 +104,15 @@ To run the benchmark helper:
 node benchmark-batch.mjs --only sol --runs 1 --backend api --reasoning none --max-decisions 50
 ```
 
-The evaluator records raw telemetry and writes a structured `result.json` in `.state/runs/<timestamp>`. Generate the human-readable report with:
+For one matched wind trial using the evaluated Sol low setting, prepare the simulator and use:
+
+```sh
+node benchmark-batch.mjs --scenario weather-challenge --model gpt-6-sol --runs 1 --backend api --reasoning low --max-decisions 40 --preflight
+```
+
+For the headwind episode, replace `weather-challenge` with `weather-headwind` and use `--max-decisions 50`. `--preflight` obtains the first model response while the prepared aircraft remains paused, then starts real-time evaluation. These commands make paid model requests.
+
+The evaluator records raw telemetry and writes a structured `result.json` in `.state/runs/<timestamp>`, including the original outcome and the 100-point score with component values and safety caps. The dashboard displays both. See [scoring rules](docs/SCORING.md). Generate the structured report with:
 
 ```sh
 node scenario.mjs report
