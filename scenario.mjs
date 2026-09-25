@@ -655,6 +655,7 @@ async function readiness(){
  if(paused!==1)checks.push('X-Plane is not paused');
  if(aircraft!==CFG.aircraft)checks.push('configured aircraft is not loaded');
  if(crashed!==0)checks.push('aircraft is in a crash state');
+ if(!op.ready)checks.push(op.setupFailure||op.setupProgress?.detail||`Preparation has not completed (state: ${op.phase||'not configured'}). Click Prepare current flight.`);
  const ready=Boolean(op.ready&&checks.length===0);
  return {mode:CFG.pocMode?'POC':'STRICT',phase:ready?'READY':op.phase||'NOT_CONFIGURED',ready,paused,aircraft,checks,message:ready?'Ready: X-Plane is paused.':'X-Plane is not ready for evaluation.'};
 }

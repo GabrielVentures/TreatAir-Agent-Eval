@@ -130,9 +130,13 @@ function liveReadiness(full=false){
 function startJob(kind,args){
  const jobFile=path.join(ROOT,'dashboard-job.json');const logFile=path.join(ROOT,'dashboard-job.log');
  const id=crypto.randomUUID(),startedAt=new Date().toISOString();
+ // Reset before spawning: the child's fresh setup state must not be overwritten.
+ if(['setup','prepare-loaded'].includes(kind)){
+  writeJson(path.join(ROOT,'dashboard-runner.json'),{status:'idle',updatedAt:startedAt});
+  updateOperator({phase:'WAITING_FOR_SIMULATOR',run:null,outcome:null,mission:null,ready:false,setupFailure:null,setupProgress:{stage:'opening_simulator',detail:'Waiting for X-Plane flight controls. Complete Use Demo and Understood if shown.',updatedAt:startedAt}});
+ }
  const child=spawn(process.execPath,args,{cwd:HERE,stdio:['ignore','pipe','pipe']});
  writeJson(jobFile,{id,kind,status:'running',pid:child.pid,startedAt,args});
- if(['setup','prepare-loaded'].includes(kind))updateOperator({phase:'WAITING_FOR_SIMULATOR',run:null,outcome:null,mission:null,ready:false,setupFailure:null,setupProgress:{stage:'opening_simulator',detail:'Waiting for X-Plane flight controls. Complete Use Demo and Understood if shown.',updatedAt:new Date().toISOString()}});
  let stdout='',stderr='';
  child.stdout.on('data',x=>{stdout+=x;fs.appendFileSync(logFile,x,{mode:0o600});});child.stderr.on('data',x=>{stderr+=x;fs.appendFileSync(logFile,x,{mode:0o600});});
  child.on('close',(code,signal)=>{const current=readJson(jobFile);if(current?.id!==id)return;const result=parseCommandJson(stdout),error=parseCommandJson(stderr)?.error||String(stderr).trim().slice(-2000)||undefined;writeJson(jobFile,{id,kind,status:code===0?'finished':'failed',pid:child.pid,code,signal,startedAt,finishedAt:new Date().toISOString(),args,result,error});});
