@@ -154,7 +154,7 @@ function runConfig(input){
  return {backend:'api',model:model.id,reasoning:input.reasoning,maxDecisions,scenarioId:scenarioProfile(input.scenarioId).id,guidanceFile,contextManifestFile,contextNames:sources.map(x=>x.name)};
 }
 async function api(req,res,url){
- if(req.method==='GET'&&url.pathname==='/api/catalog')return send(res,200,{models,scenarios:Object.values(SCENARIOS).map(({id,label,description})=>({id,label,description})),situations:listSituations(),recommendedSituation:CFG.simRoot?path.join(CFG.simRoot,CFG.situation):null,contexts:listContext(),defaultPrompt:defaultGuidance(),installation:installationSummary(CFG),credentials:credentialSummary(),csrfToken});
+ if(req.method==='GET'&&url.pathname==='/api/catalog')return send(res,200,{models,scenarios:Object.values(SCENARIOS).filter(({id})=>id!=='weather-mild').map(({id,label,description})=>({id,label,description})),situations:listSituations(),recommendedSituation:CFG.simRoot?path.join(CFG.simRoot,CFG.situation):null,contexts:listContext(),defaultPrompt:defaultGuidance(),installation:installationSummary(CFG),credentials:credentialSummary(),csrfToken});
  if(req.method==='GET'&&url.pathname==='/api/snapshot')return send(res,200,stateSnapshot());
  if(req.method==='GET'&&url.pathname==='/api/readiness')return send(res,200,liveReadiness());
  if(req.method==='GET'&&url.pathname==='/api/report'){
