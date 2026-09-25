@@ -463,7 +463,7 @@ async function setup(){
   await api.set(F.altTarget,n.altitudeFt);
   // Use the aircraft-native selected V/S mode at zero. Generic ALT capture
   // develops a long-period oscillation after the paused physics reset.
-  await api.set(F.verticalTarget,0);if(await api.get(F.verticalMode)!==2)await api.command('sim/autopilot/vertical_speed_pre_sel');
+  await api.set(F.verticalTarget,0);if(await api.get(F.verticalMode)!==2)await api.command('laminar/A333/autopilot/vertical_knob_pull');
   if(await api.get('laminar/A333/autopilot/capt_FD_bars_bypass')!==1)await api.command('sim/autopilot/fdir_command_bars_toggle');
   if(await api.get(F.ap1)!==1)await api.command('sim/autopilot/servos_on');
   if(n.towerKhz)await api.set(F.com1,n.towerKhz);
@@ -533,7 +533,7 @@ async function setup(){
     if(await api.get(F.headingMode)!==1)await api.command('sim/autopilot/heading');
     await api.set(F.headingTarget,n.magneticCourse);
     await api.set(F.verticalTarget,0);
-    if(await api.get(F.verticalMode)!==2)await api.command('sim/autopilot/vertical_speed_pre_sel');
+    if(await api.get(F.verticalMode)!==2)await api.command('laminar/A333/autopilot/vertical_knob_pull');
     await api.command('laminar/A333/autopilot/speed_knob_pull');
     await api.set(F.speedTarget,CFG.speedKts);
     // Situation reloads can retain a master-warning latch after all measured
@@ -586,12 +586,12 @@ async function stabilize(){
  update({phase:'STABILIZING',ready:false});
  try{
   await api.set(F.verticalTarget,0);
-  await api.command('sim/autopilot/vertical_speed_pre_sel');
+  await api.command('laminar/A333/autopilot/vertical_knob_pull');
   captured=await api.get(F.verticalMode)===2;
   await api.resume();
   while(Date.now()-begin<CFG.stabilizeWallTimeoutSeconds*1000){
    await sleep(CFG.sampleIntervalMs);const s=await observe();samples.push(s);log('telemetry',{phase:'stabilize',...s});
-   if(!captured&&s.simTime-first.simTime>=0.5){await api.set(F.verticalTarget,0);await api.command('sim/autopilot/vertical_speed_pre_sel');captured=await api.get(F.verticalMode)===2;}
+   if(!captured&&s.simTime-first.simTime>=0.5){await api.set(F.verticalTarget,0);await api.command('laminar/A333/autopilot/vertical_knob_pull');captured=await api.get(F.verticalMode)===2;}
    const dt=s.simTime-previous.simTime;
    // IAS is filtered and initially reflects the loaded save, not the setup velocity.
    // Permit only monotonic convergence during the short settling window, while
