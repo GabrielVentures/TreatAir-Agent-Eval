@@ -38,6 +38,13 @@ test('missing event delivery is unscored rather than failed',()=>{
  assert.equal(score.reason,'weather_event_not_verified');
 });
 
+test('infrastructure and operator interruptions cannot become model scores',()=>{
+ for(const outcome of ['interrupted_or_time_changed','operator_stopped','infrastructure_failure','infrastructure_telemetry_failure']){
+  const score=scoreEvaluation({scenarioId:'runway-change',result:{...landing,outcome},messages:[clearance],actions:[action('acknowledge_message',105,'scenario-1'),action('tune_ils',110,'28L')]});
+  assert.equal(score.score,null);assert.equal(score.reason,outcome);
+ }
+});
+
 test('unknown touchdown speed receives no quality credit',()=>{
  const score=scoreEvaluation({scenarioId:'runway-change',result:{...landing,touchdownVerticalFpm:null},messages:[clearance],actions:[action('acknowledge_message',105,'scenario-1'),action('tune_ils',110,'28L')]});
  assert.equal(score.components.quality,0);

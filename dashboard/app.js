@@ -4,7 +4,7 @@ const format=(value,digits=0)=>Number.isFinite(value)?Number(value).toFixed(digi
 const compact=value=>JSON.stringify(value,null,2);
 let catalog,latest,csrfToken,readiness={checked:false,reachable:false,ready:false,paused:false,message:'Checking X-Plane readiness.'},lastReadinessAt=0;
 let startError=null,setupRequestError=null;
-let activeStage='setup',workflowInitialized=false,preparing=false,followingRun=false,startingRun=false;
+let activeStage='setup',workflowInitialized=false,preparing=false,followingRun=false,startingRun=false,startRequestPending=false;
 const stages={setup:['Prepare the aircraft','Choose how to load the evaluation starting point.'],preparing:['Preparing the aircraft','Keep this page open while X-Plane loads and the A330 becomes ready.'],configure:['Configure the agent','Choose a model, set its decision budget and review its instructions.'],flight:['Follow the flight','Watch decisions, aircraft state and incoming messages as the mission develops.'],results:['Review the results','See how the mission ended and inspect the recorded evidence.']};
 function showStage(stage,focus=false){
  activeStage=stage;
@@ -29,7 +29,7 @@ function updateWorkflow(snapshot){
  $('#back-to-setup').hidden=!(preparing&&setupFailed);
  if(running){followingRun=true;startingRun=false;}
  if(followingRun&&!running&&snapshot.result){followingRun=false;showStage('results',true);}
- if(startingRun&&snapshot.runner?.status==='failed'){startingRun=false;showStage('configure',true);}
+ if(startingRun&&!startRequestPending&&snapshot.runner?.status==='failed'){startingRun=false;showStage('configure',true);}
 }
 
 async function request(url,options={}){const headers={'Content-Type':'application/json',...(csrfToken?{'x-flight-control-token':csrfToken}:{})};const response=await fetch(url,{...options,headers:{...headers,...(options.headers||{})}});const payload=await response.json();if(!response.ok)throw Error(payload.error||'Request failed');return payload;}
@@ -77,6 +77,12 @@ function renderResults(snapshot){const resultData=snapshot.result,telemetry=snap
  result('Phase',snapshot.operator.phase||'idle'),result('Fuel',telemetry?`${format(telemetry.fuelKg,0)} kg`:'—'),result('Runway footprint',telemetry?.runwayFootprint?.inside?'inside':telemetry?.onGround?'outside':'pending',telemetry?.runwayFootprint?.inside?'good':'')
  );$('#result-json').textContent='No final result yet.';return;}
  const touchdown=resultData.touchdown||{},final=resultData.final||{},reasons=failureReasons(resultData),deficiencies=resultData.automationDeficiencies||[],weather=resultData.weatherAssessment;
+ if(resultData.interruption){
+  summary.className='result-summary';
+  summary.replaceChildren(el('strong','',resultData.interruption.title),el('p','',resultData.interruption.detail));
+  node.replaceChildren(result('Outcome','Not evaluated'),result('Prototype score','not scored'),result('Stop reason',(resultData.outcome||'interrupted').replaceAll('_',' ')),...(weather?[result('Wind event',weather.eventDelivery==='verified'?'verified':'not delivered / not verified')]:[]));
+  $('#result-json').textContent=compact(resultData);return;
+ }
  if(weather?.goal==='go-around'){
   const passed=weather.scenarioPassed,completion=weather.goAroundCompletion||{},detail=completion.reason?.replaceAll('_',' ')||'not established';
   summary.className=`result-summary ${passed?'success':'failure'}`;
@@ -110,7 +116,7 @@ function renderSetupState(snapshot){
  const node=$('#setup-status');node.className=`setup-status ${tone}`.trim();$('#setup-stage').textContent=title;$('#setup-detail').textContent=detail;
  if((busy||running||readiness.ready)&&snapshot.operator.scenarioId&&catalog.scenarios.some(item=>item.id===snapshot.operator.scenarioId)&&$('#scenario').value!==snapshot.operator.scenarioId){$('#scenario').value=snapshot.operator.scenarioId;$('#scenario').dispatchEvent(new Event('change'));}
  $('#scenario').disabled=busy||running||Boolean(readiness.ready);
- const canRun=Boolean(readiness.ready&&readiness.paused&&!busy&&!running);const run=$('#start-run');run.disabled=!canRun;run.title=canRun?'Start the selected paid evaluation.':detail;
+ const canRun=Boolean(readiness.ready&&readiness.paused&&!busy&&!running&&!startingRun&&!startRequestPending);const run=$('#start-run');run.disabled=!canRun;run.title=canRun?'Start the selected paid evaluation.':detail;
  const automatic=Boolean(catalog?.installation?.automaticLoadAvailable),manual=Boolean(catalog?.installation?.manualLoadAvailable);$('#load-situation').disabled=busy||running||!automatic||!catalog.situations.length;$('#prepare-loaded').disabled=busy||running||!manual;$('#load-situation').textContent=tone==='problem'&&automatic?'Retry load & prepare':automatic?'Load & prepare':'Automatic loading unavailable';
  return {title,detail,tone};
 }
@@ -127,7 +133,19 @@ async function init(){catalog=await request('/api/catalog');csrfToken=catalog.cs
  $('#save-installation').addEventListener('click',async()=>{const button=$('#save-installation');button.disabled=true;try{status('Validating X-Plane installation');const reply=await request('/api/configure',{method:'POST',body:JSON.stringify({simRoot:$('#sim-root').value})});catalog=await request('/api/catalog');renderInstallation();renderSituations();status(`X-Plane configured · situation ${reply.installed?.situation?.status||'ready'} · loader ${reply.installed?.loader?.status||'ready'}`);if(latest)renderMeta(latest);}catch(error){status(error.message,true);$('#installation-panel').className='installation problem';$('#installation-state').textContent='Setup failed';$('#installation-detail').textContent=error.message;}finally{button.disabled=false;}});
  $('#load-situation').addEventListener('click',async()=>{const scenarioId=$('#scenario').value,situation=$('#situation').value;const detail='Opening X-Plane or waiting for flight controls. Complete Use Demo and Understood if shown.';showSetupStarting(detail);try{const reply=await request('/api/setup',{method:'POST',body:JSON.stringify({situation,scenarioId})});status(reply.launch?.launched?`Opening X-Plane and preparing selected situation · PID ${reply.job.pid}`:`${reply.launch?.reason||'Preparing selected situation'} · PID ${reply.job.pid}`);await refresh();}catch(error){setupRequestError=error.message;preparing=false;showStage('setup',true);await refresh();}});
  $('#prepare-loaded').addEventListener('click',async()=>{const scenarioId=$('#scenario').value;showSetupStarting('Preparing the currently loaded X-Plane flight.');try{await request('/api/prepare-loaded',{method:'POST',body:JSON.stringify({scenarioId})});status('Preparing the currently loaded situation');await refresh();}catch(error){setupRequestError=error.message;preparing=false;showStage('setup',true);await refresh();}});
- $('#start-run').addEventListener('click',async()=>{startError=null;if(!catalog.credentials?.configured){startError='Add an OpenAI API key in Settings before starting an evaluation.';$('#run-error').hidden=false;$('#run-error-message').textContent=startError;$('#run-error-billing').hidden=true;renderCredentials();$('#settings-dialog').showModal();return;}const model=selectedModel();const contextPaths=[...document.querySelectorAll('#contexts input:checked')].map(input=>input.value);const message=`Start a paid ${model.label} API evaluation (${model.estimate})? This creates model usage and resumes X-Plane.`;if(!window.confirm(message))return;$('#start-run').disabled=true;try{const reply=await request('/api/run',{method:'POST',body:JSON.stringify({backend:'api',model:model.id,reasoning:$('#reasoning').value,maxDecisions:$('#max-decisions').value,scenarioId:$('#scenario').value,prompt:$('#prompt').value,contextPaths,confirmPaid:true})});startingRun=true;showStage('flight',true);$('#decisions').replaceChildren(el('div','empty-copy','Starting the agent. Its first decision will appear here.'));status(`Starting ${reply.model}`);}catch(error){startError=error.message;$('#run-error').hidden=false;$('#run-error-message').textContent=startError;$('#run-error-billing').hidden=true;status(error.message,true);$('#start-run').disabled=false;}});
+ $('#start-run').addEventListener('click',async()=>{
+  if(startingRun||startRequestPending)return;
+  startError=null;
+  if(!catalog.credentials?.configured){startError='Add an OpenAI API key in Settings before starting an evaluation.';$('#run-error').hidden=false;$('#run-error-message').textContent=startError;$('#run-error-billing').hidden=true;renderCredentials();$('#settings-dialog').showModal();return;}
+  const model=selectedModel(),contextPaths=[...document.querySelectorAll('#contexts input:checked')].map(input=>input.value);
+  if(!window.confirm(`Start a paid ${model.label} API evaluation (${model.estimate})? This creates model usage and resumes X-Plane.`))return;
+  startingRun=true;startRequestPending=true;$('#start-run').disabled=true;
+  try{
+   const reply=await request('/api/run',{method:'POST',body:JSON.stringify({backend:'api',model:model.id,reasoning:$('#reasoning').value,maxDecisions:$('#max-decisions').value,scenarioId:$('#scenario').value,prompt:$('#prompt').value,contextPaths,confirmPaid:true})});
+   startingRun=true;showStage('flight',true);$('#decisions').replaceChildren(el('div','empty-copy','Starting the agent. Its first decision will appear here.'));status(`Starting ${reply.model}`);
+  }catch(error){startingRun=false;startError=error.message;$('#run-error').hidden=false;$('#run-error-message').textContent=startError;$('#run-error-billing').hidden=true;status(error.message,true);$('#start-run').disabled=false;}
+  finally{startRequestPending=false;}
+ });
  $('#stop-run').addEventListener('click',async()=>{if(!window.confirm('Stop preparation or evaluation and request an X-Plane pause?'))return;try{const reply=await request('/api/stop',{method:'POST',body:'{}'});status(reply.setupCancelled?'Preparation stopped and pause requested':'Stop and pause requested');}catch(error){status(error.message,true);}});
  document.querySelectorAll('[data-stage]').forEach(button=>button.addEventListener('click',()=>showStage(button.dataset.stage==='setup'&&preparing?'preparing':button.dataset.stage,true)));
  $('#back-to-setup').addEventListener('click',()=>{preparing=false;showStage('setup',true);});

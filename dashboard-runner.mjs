@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {spawn,execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import crypto from 'node:crypto';
 import {parseAgentFailure} from './run-errors.mjs';
 
 const HERE=path.dirname(fileURLToPath(import.meta.url));
@@ -14,7 +15,7 @@ const configFile=process.argv[2];
 if(!configFile)throw Error('Usage: node dashboard-runner.mjs RUN_CONFIG.json');
 const config=JSON.parse(fs.readFileSync(configFile,'utf8'));
 const runnerFile=path.join(ROOT,'dashboard-runner.json');
-const write=x=>fs.writeFileSync(runnerFile,JSON.stringify({updatedAt:new Date().toISOString(),...x},null,2),{mode:0o600});
+const write=x=>{const temp=`${runnerFile}.${crypto.randomUUID()}.tmp`;fs.writeFileSync(temp,JSON.stringify({updatedAt:new Date().toISOString(),...x},null,2),{mode:0o600});fs.renameSync(temp,runnerFile);};
 const append=(stream,chunk)=>fs.appendFileSync(path.join(ROOT,'dashboard-run.log'),`[${new Date().toISOString()}] ${stream} ${chunk}`,{mode:0o600});
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const node=process.execPath;
@@ -33,6 +34,7 @@ function child(label,args,env){
  p.stderrTail='';
  p.stdout.on('data',x=>append(label+':stdout',x));p.stderr.on('data',x=>{append(label+':stderr',x);p.stderrTail=(p.stderrTail+x.toString()).slice(-16000);});
  p.once('error',error=>append(label+':error',error.stack+'\n'));
+ p.closed=new Promise(resolve=>{p.once('close',(code,signal)=>resolve({code,signal}));p.once('error',()=>resolve({code:1,signal:null}));});
  return p;
 }
 async function waitForAccess(started){
@@ -54,8 +56,8 @@ try{
  const agentArgs=['flight-agent.mjs','--backend',config.backend,'--model',config.model,'--reasoning',config.reasoning,'--max-decisions',String(config.maxDecisions||80),'--max-post-wait-seconds','0','--guidance-file',config.guidanceFile,'--context-manifest',config.contextManifestFile];
  agent=child('agent',agentArgs,key?{OPENAI_API_KEY:key}:{});
  write({status:'running',scenarioPid:scenario.pid,agentPid:agent.pid,config:{model:config.model,reasoning:config.reasoning,backend:config.backend,contextNames:config.contextNames}});
- const scenarioExitPromise=new Promise(resolve=>scenario.once('close',(code,signal)=>resolve({code,signal})));
- const agentExitPromise=new Promise(resolve=>agent.once('close',(code,signal)=>resolve({code,signal})));
+ const scenarioExitPromise=scenario.closed;
+ const agentExitPromise=agent.closed;
  const first=await Promise.race([scenarioExitPromise.then(exit=>({who:'scenario',exit})),agentExitPromise.then(exit=>({who:'agent',exit}))]);
  // A model process that stops due to an inference failure or decision limit
  // must never leave the live simulator running until the scenario timeout.

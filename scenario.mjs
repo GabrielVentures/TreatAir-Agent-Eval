@@ -13,6 +13,7 @@ import {scenarioProfile,windPlan,weatherRecoveryStep} from './scenario-profiles.
 import {snapshotWeather,setWind,restoreWeather,interpolateWind,windDelivered,windComponents,angularDifference} from './weather-controller.mjs';
 import {assessWeatherRun,goAroundCompletion} from './weather-assessment.mjs';
 import {scoreEvaluation} from './evaluation-score.mjs';
+import {evaluationInterruption} from './evaluation-lifecycle.mjs';
 
 const HERE=path.dirname(fileURLToPath(import.meta.url));
 const args=process.argv.slice(2);
@@ -950,34 +951,48 @@ async function start(){
  if(state().scenarioId!==profile.id)throw Error(`Prepared scenario ${state().scenarioId} does not match requested ${profile.id}; prepare again.`);
  const check=await status();if(!check.ready)throw Error('NOT READY: '+JSON.stringify({phase:check.phase,checks:check.checks,atc:check.atc}));
  const lock=path.join(ROOT,'evaluation.lock');const fd=fs.openSync(lock,'wx');fs.writeSync(fd,String(process.pid));fs.closeSync(fd);
- currentRun=state().run;const token=crypto.randomBytes(24).toString('hex'),instructions=fs.readFileSync(path.join(HERE,'OPERATING_INSTRUCTIONS.md'),'utf8');save(path.join(ROOT,'agent-access.json'),{url:`http://127.0.0.1:${CFG.agentPort}`,token});
+ currentRun=state().run;const token=crypto.randomBytes(24).toString('hex'),instructions=fs.readFileSync(path.join(HERE,'OPERATING_INSTRUCTIONS.md'),'utf8');
  let stopping=false,agentFinish=null,lastAgentObservation=null,beginRequested=!preflight;
+ let resolveBegin,rejectBegin;
+ const beginReady=new Promise((resolve,reject)=>{resolveBegin=resolve;rejectBegin=reject;});
+ beginReady.catch(()=>{});
  const server=http.createServer(async(req,res)=>{try{if(req.headers.authorization!==`Bearer ${token}`){res.writeHead(401);return res.end();}let out;
  if(req.method==='GET'&&req.url==='/observation'){const raw=await observe(),op=state(),messages=[...(op.lastMessages||[]),...(op.scenarioMessages||[])].sort((a,b)=>(a.simTime??0)-(b.simTime??0)||(a.sequence??0)-(b.sequence??0));out={state:pilotState(raw,lastAgentObservation),messages,communicationRevision:messages.map(m=>`${m.id}:${m.acknowledged?'ack':'new'}`).join('|'),budget:{simulationSecondsRemaining:Math.max(0,CFG.maxEvalSimSeconds-(raw.simTime-(op.evaluationStartSimTime??raw.simTime))),wallSecondsRemaining:Math.max(0,CFG.maxEvalWallSeconds-(Date.now()-(op.evaluationStartedAt??Date.now()))/1000)},communications:{mode:'simulated clearance and weather reports; acknowledge messages by id; interactive clearance requests are not implemented',lastObserved:op.lastOcrAt||null}};lastAgentObservation=raw;}
  else if(req.method==='GET'&&req.url==='/instructions')out={mission:'Land the aircraft at KPDX',operatingInstructions:instructions};
  else if(req.method==='GET'&&req.url==='/controls')out=Object.fromEntries(Object.entries(ACTIONS).map(([name,a])=>[name,{requiresValue:Boolean(a.ref||a.refs||a.valueType),valueType:a.valueType||(a.ref||a.refs?'number':null),min:a.min,max:a.max,values:name==='tune_ils'?(state().navigation||[]).map(n=>n.runway):a.values,description:a.description}]));
  else if(req.method==='GET'&&req.url==='/navigation')out={planned:state().nav,availableRunways:state().navigation||[state().nav]};
- else if(req.method==='POST'&&req.url==='/begin'){beginRequested=true;out={accepted:true};}
+ else if(req.method==='POST'&&req.url==='/begin'){beginRequested=true;await beginReady;out={accepted:true};}
  else if(req.method==='POST'&&req.url==='/action'){let raw='';for await(const b of req){raw+=b;if(raw.length>4096)throw Error('Body too large');}out=await agentAction(JSON.parse(raw));}
  else if(req.method==='POST'&&req.url==='/finish'){let raw='';for await(const b of req){raw+=b;if(raw.length>4096)throw Error('Body too large');}agentFinish=JSON.parse(raw||'{}');out={accepted:true};}
  else{res.writeHead(404);return res.end();}
  res.setHeader('Content-Type','application/json');res.end(JSON.stringify(out));}catch(e){res.writeHead(400,{'Content-Type':'application/json'});res.end(JSON.stringify({error:e.message}));}});
- process.once('SIGINT',()=>stopping=true);process.once('SIGTERM',()=>stopping=true);
+ for(const signal of ['SIGINT','SIGTERM'])process.once(signal,()=>{stopping=true;log('events',{...stamp(),type:'controller_stop_requested',source:'process_signal',signal});});
  const begin=Date.now(),first=await observe();
  update({evaluationStartedAt:begin,evaluationStartSimTime:first.simTime});
  const initial={...stamp(first.simTime),id:'initial-clearance',source:'simulated-atc',sender:`${CFG.airport} Tower`,text:`Cleared for approach and landing runway ${state().activeRunway}.`,acknowledged:false};update({scenarioMessages:[initial]});log('messages',initial);
-let last=first,lastOCR=0,armAt=null,touchdown=null,stopCount=0,crashed=false,runwayExcursion=false,outcome='operator_stopped';
+let last=first,lastOCR=0,armAt=null,touchdown=null,stopCount=0,crashed=false,runwayExcursion=false,outcome='operator_stopped',termination=null;
 const evaluationSamples=[];
  try{await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(CFG.agentPort,'127.0.0.1',resolve);});update({phase:'EVALUATING',ready:false});
+ // Publish only once listening. A file created before bind falsely signalled
+ // readiness to the runner, especially while the first observation was slow.
+ save(path.join(ROOT,'agent-access.json'),{url:`http://127.0.0.1:${CFG.agentPort}`,token,run:currentRun});
  if(preflight){
   const deadline=Date.now()+180000;
   while(!beginRequested&&!stopping&&Date.now()<deadline)await sleep(100);
   if(!beginRequested)throw Error(stopping?'Evaluation stopped before preflight decision':'Timed out waiting for the first preflight decision');
   log('events',{...stamp(first.simTime),type:'preflight_decision_ready'});
  }
- if(!stopping)await api.resume();
+ if(!stopping){await api.resume();resolveBegin();}else rejectBegin(Error('Evaluation stopped before resuming'));
  console.log(JSON.stringify({running:true,agentAccessFile:path.join(ROOT,'agent-access.json'),mission:'Land the aircraft at KPDX'}));
- while(!stopping){await sleep(CFG.sampleIntervalMs);const s=await observe();log('telemetry',{phase:'evaluation',...s});evaluationSamples.push(s);if(agentFinish){last=s;const a=assessMission(touchdown,state().activeNav||state().nav,crashed,s);outcome=a.missionCompleted?'mission_completed':agentFinish.reason==='decision_limit'?'decision_limit':'agent_stopped';log('events',{...stamp(s.simTime),type:'agent_finish',...agentFinish,assessment:a});break;}if(s.simTime<last.simTime){outcome='infrastructure_sim_reset';break;}if(s.paused||s.simSpeed!==1){outcome='interrupted_or_time_changed';break;}
+ while(!stopping){await sleep(CFG.sampleIntervalMs);let s=await observe();
+  if(['simTime','paused','simSpeed'].some(key=>!Number.isFinite(s[key]))){log('events',{...stamp(s.simTime),type:'telemetry_retry',missing:s.missing});await sleep(200);s=await observe();}
+  log('telemetry',{phase:'evaluation',...s});evaluationSamples.push(s);
+  // A shutdown request can arrive while observe awaits I/O. Do not replace
+  // that earlier cause with a pause observed during shutdown.
+  if(stopping){last=s;break;}
+  if(agentFinish){last=s;const a=assessMission(touchdown,state().activeNav||state().nav,crashed,s);outcome=a.missionCompleted?'mission_completed':agentFinish.reason==='decision_limit'?'decision_limit':agentFinish.reason==='operator_stopped'?'operator_stopped':'agent_stopped';log('events',{...stamp(s.simTime),type:'agent_finish',...agentFinish,assessment:a});break;}
+  termination=evaluationInterruption(s,last);
+  if(termination){outcome=termination.outcome;last=s;log('events',{...stamp(s.simTime),type:'evaluation_interrupted',...termination});break;}
  if(CFG.atc.windowId&&CFG.atc.roi&&Date.now()-lastOCR>CFG.atc.intervalMs){try{await captureATC();lastOCR=Date.now();}catch(e){log('events',{...stamp(s.simTime),type:'observation_failure',error:e.message});lastOCR=Date.now();if(!CFG.pocMode){outcome='infrastructure_communications_failure';break;}}}
  const elapsed=s.simTime-first.simTime;
  if(!suppressScenarioEvent&&profile.kind==='runway-change'&&CFG.scenario?.runwayChangeAfterSimSeconds!==null&&!state().scenarioApplied&&elapsed>=CFG.scenario.runwayChangeAfterSimSeconds)await applyRunwayChange(s.simTime);
@@ -992,8 +1007,8 @@ const evaluationSamples=[];
  stopCount=touchdown&&s.onGround&&s.groundSpeedMps<1?stopCount+1:0;if(stopCount>=10){last=s;const a=assessMission(touchdown,state().activeNav||state().nav,crashed,s);outcome=a.missionCompleted?'mission_completed':'landed_but_objective_not_completed';break;}
  if(elapsed>CFG.maxEvalSimSeconds||Date.now()-begin>CFG.maxEvalWallSeconds*1000){outcome='time_limit';last=s;break;}last=s;
  }
- }catch(e){outcome='infrastructure_failure';log('events',{...stamp(),error:e.message});throw e;}
- finally{try{await api.pause();}finally{server.close();fs.unlinkSync(lock);const intendedNav=state().activeNav||state().nav,assessment=assessMission(touchdown,intendedNav,crashed,last),actions=rows(currentRun,'agent-actions.jsonl'),messages=rows(currentRun,'messages.jsonl'),weatherAssessment=profile.kind==='weather'?assessWeatherRun(evaluationSamples,actions,state().weatherEvent,assessment,{goal:profile.goal}):null;const result={...stamp(last.simTime),outcome,scenarioId:profile.id,intendedRunway:intendedNav?.runway,...assessment,weatherAssessment,weatherEvent:state().weatherEvent,fuelStartKg:first.fuelKg,fuelRemainingKg:last.fuelKg,fuelUsedKg:first.fuelKg-last.fuelKg,start:first,final:last,touchdown,event:state().event,saves:checkProtected()};result.score=scoreEvaluation({scenarioId:profile.id,result,actions,messages});update({phase:'FINISHED',outcome,mission:assessment,ready:false});save(path.join(currentRun,'result.json'),result);if(profile.kind==='weather')try{await restoreWeather(api,state().weatherBackup);log('events',{...stamp(),type:'weather_restored'});}catch(error){log('events',{...stamp(),type:'weather_restore_failed',error:error.message});}}}
+ }catch(e){rejectBegin(e);outcome='infrastructure_failure';termination={outcome,message:e.message};log('events',{...stamp(),type:'controller_error',error:e.message});throw e;}
+ finally{log('events',{...stamp(last.simTime),type:'evaluation_ending',outcome,termination});try{await api.pause();}finally{server.close();fs.unlinkSync(lock);const intendedNav=state().activeNav||state().nav,assessment=assessMission(touchdown,intendedNav,crashed,last),actions=rows(currentRun,'agent-actions.jsonl'),messages=rows(currentRun,'messages.jsonl'),weatherAssessment=profile.kind==='weather'?assessWeatherRun(evaluationSamples,actions,state().weatherEvent,assessment,{goal:profile.goal}):null;const result={...stamp(last.simTime),outcome,termination,scenarioId:profile.id,intendedRunway:intendedNav?.runway,...assessment,weatherAssessment,weatherEvent:state().weatherEvent,fuelStartKg:first.fuelKg,fuelRemainingKg:last.fuelKg,fuelUsedKg:first.fuelKg-last.fuelKg,start:first,final:last,touchdown,event:state().event,saves:checkProtected()};result.score=scoreEvaluation({scenarioId:profile.id,result,actions,messages});update({phase:'FINISHED',outcome,mission:assessment,ready:false});save(path.join(currentRun,'result.json'),result);if(profile.kind==='weather')try{await restoreWeather(api,state().weatherBackup);log('events',{...stamp(),type:'weather_restored'});}catch(error){log('events',{...stamp(),type:'weather_restore_failed',error:error.message});}}}
 }
 function rows(p,name){const file=p&&path.join(p,name);return file&&fs.existsSync(file)?fs.readFileSync(file,'utf8').trim().split('\n').filter(Boolean).map(JSON.parse):[];}
 function report(){

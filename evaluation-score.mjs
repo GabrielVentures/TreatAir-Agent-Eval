@@ -1,5 +1,6 @@
 // A retrospective prototype score. Keep the physical outcome and hard safety
 // checks alongside it; this percentage is not a probability of a safe flight.
+import {resultInterruption} from './evaluation-lifecycle.mjs';
 const MAX_POINTS=100;
 const PROTOTYPE_TAILWIND_KTS=15;
 const satisfied=action=>action?.outcome?.status==='satisfied';
@@ -18,6 +19,7 @@ export function scoreEvaluation({scenarioId,result,actions=[],messages=[]}){
  const weather=scenarioId?.startsWith('weather-');
  const assessment=result.weatherAssessment;
  if(weather&&assessment?.eventDelivery!=='verified')return unscored('weather_event_not_verified');
+ if(resultInterruption(result))return unscored(result.outcome||'run_interrupted');
  const event=messages.find(message=>message.id==='scenario-1');
  if(!event&&scenarioId==='runway-change')return unscored('runway_clearance_not_recorded');
 

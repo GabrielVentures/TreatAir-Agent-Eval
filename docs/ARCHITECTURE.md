@@ -31,11 +31,13 @@ The matched wind benchmark uses two independent episodes. `weather-challenge` in
 
 A late go-around can complete the physical objective while losing timing points. These rules are declared benchmark policy, not verified A330 operating limits. Selected speed is a tracking reference because a verified weight-dependent landing-speed calculation is not yet available from the adapter. The [scenario specification](WEATHER-PAIR.md) gives the two wind directions and objectives.
 
-The batch runner supports `--preflight`, used for the matched benchmark. It obtains the first model response while paused, then starts the real-time flight. Subsequent inference runs while the aircraft continues moving.
+The batch runner supports `--preflight`, used for the matched benchmark. It obtains the first model response while paused, then starts the real-time flight. The gateway publishes its access file only after it is listening, and acknowledges the begin request only after resume is verified. Subsequent inference runs while the aircraft continues moving. The dashboard rejects overlapping Start requests so only one runner owns the flight.
 
 ## Evidence flow
 
 Each run has separate JSONL logs for model decisions, agent actions, telemetry, messages, scenario events, and setup decisions. `result.json` contains the final structured assessment. This makes it possible to inspect whether a failure came from the model decision, action mapping, scenario setup, or missing event delivery.
+
+Run termination is recorded before the controller's cleanup pause, including the observed pause, simulation speed and clock values. Missing timing telemetry is an infrastructure error, not evidence of an operator pause. A verified interruption is shown as unscored, not as a failed aviation decision. When the gateway closes after saving the current run's result, the agent exits normally; an unexpected loss without that result produces a controller-connection error. Only read requests are retried, never cockpit actions that could execute twice.
 
 `evaluation-score.mjs` computes the 100-point score from the recorded result, actions, and messages. The result includes decision, timing, execution, quality, the total before safety caps, and the final score. Missing event evidence leaves the result unscored. Reports and the dashboard show the points alongside the original outcome; see [Scoring](SCORING.md). Published [wind benchmark summaries](../examples/weather-matched-benchmark.json) contain selected measurements from all 30 evaluated wind trials without local paths or credentials.
 

@@ -11,6 +11,7 @@ import {configureInstallation,installationSummary,loadConfig} from './installati
 import {SCENARIOS,scenarioProfile} from './scenario-profiles.mjs';
 import {scoreEvaluation} from './evaluation-score.mjs';
 import {loadSavedApiKey,saveApiKey,clearSavedApiKey} from './local-credentials.mjs';
+import {resultInterruption} from './evaluation-lifecycle.mjs';
 
 const HERE=path.dirname(fileURLToPath(import.meta.url));
 const DASH=path.join(HERE,'dashboard');
@@ -35,6 +36,7 @@ const contextCatalogFile=path.join(contextDir,'catalog.json');
 const operatorFile=path.join(ROOT,'operator.json');
 const inheritedApiKey=String(process.env.OPENAI_API_KEY||'').trim();
 let dashboardApiKey=loadSavedApiKey(ROOT);
+let startingEvaluation=false;
 fs.mkdirSync(contextDir,{recursive:true,mode:0o700});
 
 const readJson=file=>fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):null;
@@ -50,7 +52,8 @@ function stateSnapshot(){
  const messages=[...recordedMessages,...(operator.lastMessages||[]),...(operator.scenarioMessages||[])].sort((a,b)=>(a.simTime??0)-(b.simTime??0)||(a.sequence??0)-(b.sequence??0));
  const uniqueMessages=[...new Map(messages.map(m=>[m.id||`${m.text}:${m.wallTime}`,m])).values()].slice(-30);
  const result=run?readJson(path.join(run,'result.json')):null;
- if(result&&!result.score)result.score=scoreEvaluation({scenarioId:result.scenarioId||operator.scenarioId||'runway-change',result,actions:run?jsonRows(path.join(run,'agent-actions.jsonl')):[],messages:run?jsonRows(path.join(run,'messages.jsonl')):[]});
+ if(result)result.interruption=resultInterruption(result);
+ if(result&&(!result.score||result.interruption))result.score=scoreEvaluation({scenarioId:result.scenarioId||operator.scenarioId||'runway-change',result,actions:run?jsonRows(path.join(run,'agent-actions.jsonl')):[],messages:run?jsonRows(path.join(run,'messages.jsonl')):[]});
  return {serverTime:new Date().toISOString(),operator:{phase:operator.phase,ready:operator.ready,outcome:operator.outcome,run,scenarioId:operator.scenarioId,weatherEvent:operator.weatherEvent,activeRunway:operator.activeRunway,setupFailure:operator.setupFailure,setupProgress:operator.setupProgress,mission:operator.mission,event:operator.event,atc:operator.atc,landingHelper:operator.landingHelper},runner:readJson(path.join(ROOT,'dashboard-runner.json')),job:readJson(path.join(ROOT,'dashboard-job.json')),telemetry:telemetry.map(compactTelemetry),decisionTotal:decisionRows.length,decisions,actions:actions.slice(-50),events,messages:uniqueMessages,result};
 }
 function listSituations(){if(!CFG.simRoot)return [];const dir=path.join(CFG.simRoot,'Output','situations');if(!fs.existsSync(dir))return [];return fs.readdirSync(dir).filter(name=>name.endsWith('.sit')).sort().map(name=>({name,path:path.join(dir,name),modifiedAt:fs.statSync(path.join(dir,name)).mtime.toISOString()}));}
@@ -78,7 +81,7 @@ function recoverAbortedEvaluation(){
  }
  writeJson(operatorFile,{...operator,phase:'FINISHED',ready:false,outcome:'operator_stopped',setupFailure:null});
 }
-function evaluationBusy(){recoverAbortedEvaluation();const snapshot=stateSnapshot();return snapshot.operator.phase==='EVALUATING'||['starting','running'].includes(snapshot.runner?.status)||snapshot.job?.status==='running';}
+function evaluationBusy(){if(startingEvaluation)return true;recoverAbortedEvaluation();const snapshot=stateSnapshot();return snapshot.operator.phase==='EVALUATING'||['starting','running'].includes(snapshot.runner?.status)||snapshot.job?.status==='running';}
 function safeName(name){const out=String(name||'context').replace(/[^a-zA-Z0-9._-]/g,'_').replace(/^\.+/,'');if(!out)return 'context.txt';return out;}
 function updateOperator(patch){writeJson(operatorFile,{...(readJson(operatorFile)||{}),...patch});}
 function keychainApiKeyAvailable(){
@@ -198,24 +201,28 @@ async function api(req,res,url){
  if(req.method==='POST'&&url.pathname==='/api/setup'){
   requireLocalControl(req);if(evaluationBusy())throw Error('Cannot load a situation while setup or an evaluation is active.');
   const installation=installationSummary(CFG);if(!installation.automaticLoadAvailable)throw Error(`Automatic situation loading is unavailable: situation ${installation.assets?.situation?.status||'missing'}, loader ${installation.assets?.loader?.status||'missing'}. Load the saved flight in X-Plane, then choose Use current flight.`);
-  const input=await body(req);const profile=scenarioProfile(input.scenarioId);const situations=listSituations(),found=situations.find(x=>x.path===input.situation);if(!found)throw Error('Select a situation from the catalog.');
+  const input=await body(req);if(evaluationBusy())throw Error('Cannot load a situation while setup or an evaluation is active.');const profile=scenarioProfile(input.scenarioId);const situations=listSituations(),found=situations.find(x=>x.path===input.situation);if(!found)throw Error('Select a situation from the catalog.');
   const launch=launchXPlane(found.path);
   return send(res,202,{accepted:true,launch,job:startJob('setup',['scenario.mjs','setup','--sit',found.path,'--scenario',profile.id,'--watch-xplane-process'])});
  }
  if(req.method==='POST'&&url.pathname==='/api/prepare-loaded'){
   requireLocalControl(req);if(evaluationBusy())throw Error('Cannot prepare a situation while setup or an evaluation is active.');
   const installation=installationSummary(CFG);if(!installation.manualLoadAvailable)throw Error('Configure a valid X-Plane installation and install the bundled situation first.');
-  const profile=scenarioProfile((await body(req)).scenarioId);
+  const input=await body(req);if(evaluationBusy())throw Error('Cannot prepare a situation while setup or an evaluation is active.');const profile=scenarioProfile(input.scenarioId);
   return send(res,202,{accepted:true,job:startJob('prepare-loaded',['scenario.mjs','setup','--reuse-loaded','--scenario',profile.id,'--watch-xplane-process'])});
  }
  if(req.method==='POST'&&url.pathname==='/api/run'){
   requireLocalControl(req);
+  if(startingEvaluation||evaluationBusy())throw Error('Preparation or an evaluation is already active. Wait for it to finish, or stop it first.');
+  startingEvaluation=true;
+  try{
   const prior=readJson(path.join(ROOT,'dashboard-runner.json'));if(['starting','running'].includes(prior?.status))throw Error('An evaluation is already running. Stop it or wait for it to finish.');
   const readiness=liveReadiness(true);if(!readiness.ready||!readiness.paused)throw Error(`Evaluation is locked: ${readiness.checks.join('; ')||readiness.message}`);
   if(!credentialSummary().configured)throw Error('Add an OpenAI API key in Settings before starting an evaluation.');
   const config=runConfig(await body(req));if(config.scenarioId!==(readJson(operatorFile)||{}).scenarioId)throw Error('Selected scenario differs from the prepared flight. Prepare the aircraft again.');const file=path.join(ROOT,'dashboard-run-config.json');writeJson(file,config);
   writeJson(path.join(ROOT,'dashboard-runner.json'),{status:'starting',updatedAt:new Date().toISOString()});
   const child=spawn(process.execPath,['dashboard-runner.mjs',file],{cwd:HERE,detached:true,stdio:'ignore',env:{...process.env,...(dashboardApiKey?{OPENAI_API_KEY:dashboardApiKey}:{})}});child.once('error',()=>writeJson(path.join(ROOT,'dashboard-runner.json'),{status:'failed',error:'Could not start the evaluation process. Restart Flight Control Room and try again.',updatedAt:new Date().toISOString()}));child.unref();return send(res,202,{accepted:true,pid:child.pid,model:config.model,reasoning:config.reasoning});
+  }finally{startingEvaluation=false;}
  }
  if(req.method==='POST'&&url.pathname==='/api/stop'){
   requireLocalControl(req);

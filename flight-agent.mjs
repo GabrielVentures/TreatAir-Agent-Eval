@@ -24,8 +24,28 @@ const schemaPath=path.join(HERE,'flight-decision.schema.json');
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const access=JSON.parse(fs.readFileSync(path.join(ROOT,'agent-access.json'),'utf8'));
 const headers={Authorization:`Bearer ${access.token}`,'Content-Type':'application/json'};
-const call=async(route,method='GET',body)=>{const r=await fetch(access.url+route,{method,headers,body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(15000)});const text=await r.text();if(!r.ok)throw Error(`${method} ${route}: ${r.status} ${text}`);return JSON.parse(text);};
 const operator=()=>JSON.parse(fs.readFileSync(path.join(ROOT,'operator.json'),'utf8'));
+const evaluationRun=access.run||operator().run;
+function evaluationCompleted(){
+ try{return operator().phase==='FINISHED'&&operator().run===evaluationRun&&Boolean(evaluationRun)&&fs.existsSync(path.join(evaluationRun,'result.json'));}catch{return false;}
+}
+const call=async(route,method='GET',body)=>{
+ for(let attempt=0;attempt<2;attempt++){
+  try{
+   const r=await fetch(access.url+route,{method,headers,body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(15000)});
+   const text=await r.text();
+   if(!r.ok){const error=Error(`${method} ${route}: ${r.status} ${text}`);error.httpStatus=r.status;throw error;}
+   return JSON.parse(text);
+  }catch(error){
+   if(evaluationCompleted()){const ended=Error('The scenario has finished and saved its result.');ended.code='evaluation_complete';throw ended;}
+   if(error.httpStatus&&error.httpStatus<500)throw error;
+   // Only retry reads. Retrying an accepted toggle/action could undo it.
+   if(method==='GET'&&attempt===0&&(!error.httpStatus||error.httpStatus>=500)){await sleep(300);continue;}
+   error.publicFailure={code:'gateway_unavailable',message:`The local flight controller could not complete ${method} ${route}. The run stopped because of a controller connection error, not an aviation decision. Prepare the flight again.`};
+   throw error;
+  }
+ }
+};
 const append=(file,x)=>fs.appendFileSync(file,JSON.stringify(x)+'\n',{mode:0o600});
 const modeFingerprint=o=>JSON.stringify({ap1:o.state.ap1,ap2:o.state.ap2,athrOn:o.state.athrOn,headingMode:o.state.headingMode,navMode:o.state.navMode,gsMode:o.state.gsMode,verticalMode:o.state.verticalMode,onGround:o.state.onGround,hasCrashed:o.state.hasCrashed});
 const staleReasons=(before,after)=>{
@@ -56,6 +76,7 @@ function promptFor({instructions,navigation,observation,memory,contextSources}){
  return {cacheableInstructions,prompt};
 }
 
+async function runAgent(){
 let instructions=await call('/instructions');
 if(guidanceFile)instructions={...instructions,operatingInstructions:fs.readFileSync(guidanceFile,'utf8')};
 const contextSources=readContextSources(contextManifestFile);
@@ -69,22 +90,20 @@ let stopReason='decision_limit';
 const latencySamples=[];
 for(let step=1;step<=maxDecisions;step++){
  let observation;
- try{observation=await call('/observation');}catch(e){stopReason='gateway_end';console.error(`Evaluation gateway ended: ${e.message}`);break;}
+ observation=await call('/observation');
  observation.budget={...observation.budget,decisionNumber:step,decisionsCompleted:step-1,decisionsRemaining:maxDecisions-step+1,decisionLimit:maxDecisions};
  observation.budget.recentInferenceSeconds=latencySamples.length?Math.round(latencySamples.at(-1)/100)/10:null;
  observation.budget.recentMaxInferenceSeconds=latencySamples.length?Math.round(Math.max(...latencySamples)/100)/10:null;
  const context=promptFor({instructions,controls,navigation,observation,memory,contextSources});
  const prompt=backend==='codex'?context.cacheableInstructions+'\n\n'+context.prompt+'\nReturn the required decision JSON using these controls: '+JSON.stringify(controls):context.prompt;
  const inferenceStartedAt=new Date().toISOString(),inferenceStartedMs=Date.now();
- let response;
- try{response=await decide({backend,model,reasoning,prompt,cacheableInstructions:context.cacheableInstructions,tools,toolHistory,schemaPath,cwd:HERE});}
- catch(error){console.error(JSON.stringify({type:'agent_failure',error:error.publicFailure||{code:'agent_error',message:'The agent could not start or continue. Check your connection and model settings. Details are in the local run log.'}}));throw error;}
+ const response=await decide({backend,model,reasoning,prompt,cacheableInstructions:context.cacheableInstructions,tools,toolHistory,schemaPath,cwd:HERE});
  const {decision,transport,responseItems=[]}=response;
  const inferenceLatencyMs=Date.now()-inferenceStartedMs;
  latencySamples.push(inferenceLatencyMs);if(latencySamples.length>10)latencySamples.shift();
  if(step===1)await call('/begin','POST');
  let latest;
- try{latest=await call('/observation');}catch(e){stopReason='gateway_end';console.error(`Evaluation gateway ended after inference: ${e.message}`);break;}
+ latest=await call('/observation');
  const discardedFor=staleReasons(observation,latest);
  const results=[];
  if(!discardedFor.length){
@@ -98,7 +117,7 @@ for(let step=1;step<=maxDecisions;step++){
    }
    const body={action:requested.action,value:requested.value};
    try{const result=await call('/action','POST',body);results.push({requested,accepted:true,outcome:result.outcome,state:result.state});}
-   catch(e){results.push({requested,accepted:false,outcome:{status:'failed',reason:e.message},error:e.message});}
+   catch(e){if(e.code==='evaluation_complete'||e.publicFailure?.code==='gateway_unavailable')throw e;results.push({requested,accepted:false,outcome:{status:'failed',reason:e.message},error:e.message});}
   }
  }
  const record={wallTime:new Date().toISOString(),step,backend,model,reasoning,inferenceStartedAt,inferenceLatencyMs,observationAgeAtDecisionSeconds:latest.state.simTime-observation.state.simTime,transport,observation,latestBeforeExecution:latest,discardedFor,decision,results};
@@ -117,4 +136,13 @@ for(let step=1;step<=maxDecisions;step++){
 // Reaching the decision cap is an explicit incomplete result, not permission to
 // let the simulator continue unobserved. The runner also has a process-level
 // fail-closed shutdown in case this gateway call itself is unavailable.
-if(!finished){try{await call('/finish','POST',{assessment:'Runner stopped before completing the mission.',reason:stopReason});await sleep(1500);}catch{}}
+if(!finished){try{await call('/finish','POST',{assessment:'Runner stopped before completing the mission.',reason:stopReason});await sleep(1500);}catch(error){if(error.code!=='evaluation_complete')throw error;}}
+}
+try{await runAgent();}
+catch(error){
+ if(error.code==='evaluation_complete')console.log(JSON.stringify({type:'agent_end',reason:'scenario_finished'}));
+ else{
+  console.error(JSON.stringify({type:'agent_failure',error:error.publicFailure||{code:'agent_error',message:'The agent could not continue. Check the run error and model settings, then prepare the flight again.'}}));
+  console.error(error.stack||error.message);process.exitCode=1;
+ }
+}
