@@ -112,6 +112,8 @@ node benchmark-batch.mjs --scenario weather-challenge --model gpt-6-sol --runs 1
 
 For the headwind episode, replace `weather-challenge` with `weather-headwind` and use `--max-decisions 50`. `--preflight` obtains the first model response while the prepared aircraft remains paused, then starts real-time evaluation. These commands make paid model requests.
 
+Dashboard runs keep the prepared aircraft paused until the first model response succeeds. If OpenAI rejects a request for insufficient quota, the dashboard displays a persistent credit/spending-limit error with a billing link. Add credit or review limits for the account/project owning the API key, then prepare the flight and retry. Invalid keys and temporary rate limits have separate messages.
+
 The evaluator records raw telemetry and writes a structured `result.json` in `.state/runs/<timestamp>`, including the original outcome and the 100-point score with component values and safety caps. The dashboard displays both. See [scoring rules](docs/SCORING.md). Generate the structured report with:
 
 ```sh

@@ -18,6 +18,12 @@
         </div>
       </header>
 
+      <section id="run-error" class="run-error" role="alert" hidden>
+        <strong>Evaluation stopped</strong>
+        <p id="run-error-message"></p>
+        <a id="run-error-billing" href="https://platform.openai.com/settings/organization/billing/overview" target="_blank" rel="noopener noreferrer" hidden>Open OpenAI billing ↗</a>
+      </section>
+
       <dialog class="settings-dialog" id="settings-dialog" aria-labelledby="settings-title">
         <form id="settings-form">
           <div class="settings-heading"><div><h2 id="settings-title">Settings</h2><p>Configure provider access for this dashboard session.</p></div><button class="icon-button" id="close-settings" type="button" aria-label="Close settings" title="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.7 6.7 10.6 10.6m0-10.6L6.7 17.3"/></svg></button></div>

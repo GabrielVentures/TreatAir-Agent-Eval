@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {spawn,execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import {parseAgentFailure} from './run-errors.mjs';
 
 const HERE=path.dirname(fileURLToPath(import.meta.url));
 const ROOT=process.env.XPLANE_SCENARIO_STATE||path.join(HERE,'.state');
@@ -29,7 +30,8 @@ function providerKey(){
 }
 function child(label,args,env){
  const p=spawn(node,args,{cwd:HERE,env:{...process.env,...env},stdio:['ignore','pipe','pipe']});
- p.stdout.on('data',x=>append(label+':stdout',x));p.stderr.on('data',x=>append(label+':stderr',x));
+ p.stderrTail='';
+ p.stdout.on('data',x=>append(label+':stdout',x));p.stderr.on('data',x=>{append(label+':stderr',x);p.stderrTail=(p.stderrTail+x.toString()).slice(-16000);});
  p.once('error',error=>append(label+':error',error.stack+'\n'));
  return p;
 }
@@ -46,9 +48,9 @@ let scenario,agent;
 try{
  write({status:'starting',config:{model:config.model,reasoning:config.reasoning,backend:config.backend,contextNames:config.contextNames}});
  const started=Date.now();
- scenario=child('scenario',['scenario.mjs','start','--scenario',config.scenarioId],{});
- await waitForAccess(started);
  const key=providerKey();
+ scenario=child('scenario',['scenario.mjs','start','--scenario',config.scenarioId,'--preflight'],{});
+ await waitForAccess(started);
  const agentArgs=['flight-agent.mjs','--backend',config.backend,'--model',config.model,'--reasoning',config.reasoning,'--max-decisions',String(config.maxDecisions||80),'--max-post-wait-seconds','0','--guidance-file',config.guidanceFile,'--context-manifest',config.contextManifestFile];
  agent=child('agent',agentArgs,key?{OPENAI_API_KEY:key}:{});
  write({status:'running',scenarioPid:scenario.pid,agentPid:agent.pid,config:{model:config.model,reasoning:config.reasoning,backend:config.backend,contextNames:config.contextNames}});
@@ -61,7 +63,9 @@ try{
  if(first.who==='agent'&&!scenario.killed){append('runner',`Agent exited first: ${JSON.stringify(first.exit)}. Requesting fail-closed scenario shutdown.\n`);scenario.kill('SIGTERM');}
  if(first.who==='scenario'&&!agent.killed){append('runner',`Scenario exited first: ${JSON.stringify(first.exit)}. Stopping agent.\n`);agent.kill('SIGTERM');}
  const [scenarioExit,agentExit]=await Promise.all([scenarioExitPromise,agentExitPromise]);
- write({status:'finished',scenarioExit,agentExit,config:{model:config.model,reasoning:config.reasoning,backend:config.backend,contextNames:config.contextNames}});
+ const failure=parseAgentFailure(agent.stderrTail);
+ const failed=Boolean(failure)||(first.exit.code!==null&&first.exit.code!==0);
+ write({status:failed?'failed':'finished',...(failed?{error:failure?.message||`${first.who==='agent'?'The agent':'Flight evaluation'} stopped unexpectedly. Check the local run log for details.`,errorCode:failure?.code||'process_error'}:{}),scenarioExit,agentExit,config:{model:config.model,reasoning:config.reasoning,backend:config.backend,contextNames:config.contextNames}});
 }catch(error){
  if(scenario&&!scenario.killed)scenario.kill('SIGTERM');
  if(agent&&!agent.killed)agent.kill('SIGTERM');

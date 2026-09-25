@@ -8,6 +8,13 @@ const here=path.dirname(fileURLToPath(import.meta.url));
 const schemaPath=path.join(here,'flight-decision.schema.json');
 const sample={assessment:'Continue monitoring.',actions:[],waitSeconds:0,done:false};
 
+test('exhausted API quota reaches the agent as an actionable public error',async()=>{
+ const fetchImpl=async()=>({ok:false,status:429,text:async()=>JSON.stringify({error:{code:'insufficient_quota',message:'You exceeded your current quota'}})});
+ await assert.rejects(()=>decide({backend:'api',model:'test',prompt:'test',tools:[],env:{OPENAI_API_KEY:'test-only'},fetchImpl}),error=>{
+  assert.equal(error.publicFailure.code,'api_quota');assert.match(error.publicFailure.message,/Add credit/);return true;
+ });
+});
+
 test('split flight context caches only the stable prefix on GPT-5.6+ and preserves live data',async()=>{
  for(const model of ['gpt-5.6-terra','gpt-5.6-sol','gpt-5.6-luna','gpt-6-astra','gpt-5.4-nano','gpt-5.4-mini']){
   const bodies=[];

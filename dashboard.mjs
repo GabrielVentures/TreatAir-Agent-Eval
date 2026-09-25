@@ -209,7 +209,8 @@ async function api(req,res,url){
   const readiness=liveReadiness(true);if(!readiness.ready||!readiness.paused)throw Error(`Evaluation is locked: ${readiness.checks.join('; ')||readiness.message}`);
   if(!credentialSummary().configured)throw Error('Add an OpenAI API key in Settings before starting an evaluation.');
   const config=runConfig(await body(req));if(config.scenarioId!==(readJson(operatorFile)||{}).scenarioId)throw Error('Selected scenario differs from the prepared flight. Prepare the aircraft again.');const file=path.join(ROOT,'dashboard-run-config.json');writeJson(file,config);
-  const child=spawn(process.execPath,['dashboard-runner.mjs',file],{cwd:HERE,detached:true,stdio:'ignore',env:{...process.env,...(dashboardApiKey?{OPENAI_API_KEY:dashboardApiKey}:{})}});child.unref();return send(res,202,{accepted:true,pid:child.pid,model:config.model,reasoning:config.reasoning});
+  writeJson(path.join(ROOT,'dashboard-runner.json'),{status:'starting',updatedAt:new Date().toISOString()});
+  const child=spawn(process.execPath,['dashboard-runner.mjs',file],{cwd:HERE,detached:true,stdio:'ignore',env:{...process.env,...(dashboardApiKey?{OPENAI_API_KEY:dashboardApiKey}:{})}});child.once('error',()=>writeJson(path.join(ROOT,'dashboard-runner.json'),{status:'failed',error:'Could not start the evaluation process. Restart Flight Control Room and try again.',updatedAt:new Date().toISOString()}));child.unref();return send(res,202,{accepted:true,pid:child.pid,model:config.model,reasoning:config.reasoning});
  }
  if(req.method==='POST'&&url.pathname==='/api/stop'){
   requireLocalControl(req);

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import {spawnSync} from 'node:child_process';
+import {providerFailure} from './run-errors.mjs';
 
 export function parseDecision(text){
  const cleaned=String(text??'').trim().replace(/^```json\s*/,'').replace(/\s*```$/,'');
@@ -64,7 +65,7 @@ export async function decide({backend='codex',model,reasoning='low',prompt,cache
  if(!response)throw lastTransportError||new Error('Responses API transport failed');
  const raw=await response.text();let payload;
  try{payload=raw?JSON.parse(raw):null;}catch{throw new Error(`Responses API returned non-JSON HTTP ${response.status}`);}
- if(!response.ok)throw new Error(`Responses API HTTP ${response.status}: ${payload?.error?.message||raw}`);
+ if(!response.ok){const error=new Error(`Responses API HTTP ${response.status}: ${payload?.error?.message||raw}`);error.publicFailure=providerFailure(response.status,payload);throw error;}
  if(payload?.status!=='completed')throw new Error(`Responses API did not complete: ${payload?.status||'unknown'} ${payload?.incomplete_details?.reason||payload?.error?.message||''}`.trim());
  const calls=(payload.output||[]).filter(x=>x.type==='function_call');
  const actions=tools?calls.map(c=>{const args=JSON.parse(c.arguments);return {action:c.name,value:args.value??null,intent:args.intent??'',callId:c.call_id};}):[];

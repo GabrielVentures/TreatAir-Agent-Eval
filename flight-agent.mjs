@@ -76,7 +76,10 @@ for(let step=1;step<=maxDecisions;step++){
  const context=promptFor({instructions,controls,navigation,observation,memory,contextSources});
  const prompt=backend==='codex'?context.cacheableInstructions+'\n\n'+context.prompt+'\nReturn the required decision JSON using these controls: '+JSON.stringify(controls):context.prompt;
  const inferenceStartedAt=new Date().toISOString(),inferenceStartedMs=Date.now();
- const {decision,transport,responseItems=[]}=await decide({backend,model,reasoning,prompt,cacheableInstructions:context.cacheableInstructions,tools,toolHistory,schemaPath,cwd:HERE});
+ let response;
+ try{response=await decide({backend,model,reasoning,prompt,cacheableInstructions:context.cacheableInstructions,tools,toolHistory,schemaPath,cwd:HERE});}
+ catch(error){console.error(JSON.stringify({type:'agent_failure',error:error.publicFailure||{code:'agent_error',message:'The agent could not start or continue. Check your connection and model settings. Details are in the local run log.'}}));throw error;}
+ const {decision,transport,responseItems=[]}=response;
  const inferenceLatencyMs=Date.now()-inferenceStartedMs;
  latencySamples.push(inferenceLatencyMs);if(latencySamples.length>10)latencySamples.shift();
  if(step===1)await call('/begin','POST');
