@@ -8,6 +8,7 @@ import {fileURLToPath} from 'node:url';
 import {withinRunway,landingStep} from './landing-support.mjs';
 import {loadConfig} from './installation.mjs';
 import {resumeForSetup} from './setup-resume.mjs';
+import {resetSetupOrientation} from './setup-orientation.mjs';
 import {scenarioProfile,windPlan,weatherRecoveryStep} from './scenario-profiles.mjs';
 import {snapshotWeather,setWind,restoreWeather,interpolateWind,windDelivered,windComponents,angularDifference} from './weather-controller.mjs';
 import {assessWeatherRun,goAroundCompletion} from './weather-assessment.mjs';
@@ -439,10 +440,7 @@ async function setup(){
   // representative of the saved approach. Use one deterministic POC attitude
   // so successive model runs do not inherit the previous model's maneuver.
   const pitchDeg=reuse?(CFG.initialPitchDeg??5.5):Math.max(1,Math.min(10,loaded.pitch-Math.atan2(loaded.verticalMps,loaded.groundSpeedMps)*180/Math.PI));
-  await api.set('sim/flightmodel/position/theta',pitchDeg);
-  await api.set('sim/flightmodel/position/phi',0);
-  await api.set(F.headingTrue,n.trueCourse);
-  for(const name of ['phi_dot','theta_dot','psi_dot'])await api.set(`sim/flightmodel/position/${name}`,0);
+  await resetSetupOrientation(api,n.trueCourse,pitchDeg);
   log('setup-decisions',{...stamp(loaded.simTime),initialPitchDeg:pitchDeg,reason:'Preserve approximate loaded angle of attack during setup-only level-flight reset'});
   for(const [axis,v] of [['x',speed*Math.sin(radians)],['z',-speed*Math.cos(radians)]]){
    const wind=await api.get(`sim/weather/aircraft/wind_now_${axis}_msc`);
