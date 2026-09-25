@@ -68,7 +68,7 @@ The final status must report `"ready": true` and `"paused": 1` before an evaluat
 
 ## Run an agent
 
-For the direct API backend, open the settings button in the upper-right corner and add an OpenAI API key for the current dashboard session. The key remains in server memory and is not written to disk or returned to the browser.
+For the direct API backend, open Settings in the upper-right corner and save an OpenAI API key once. It is reused after dashboard restarts. Settings can also replace or remove it. The key is stored server-side in `.state/provider-credentials.json`, excluded from Git and flight records, with owner-only file permissions on macOS/Linux. This is a local plaintext credential file, not browser storage; do not share or back up the `.state` folder publicly. Environment variables and macOS Keychain remain available as fallbacks.
 
 For command-line use, set the environment variable instead:
 

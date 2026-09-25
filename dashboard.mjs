@@ -10,6 +10,7 @@ import {fileURLToPath} from 'node:url';
 import {configureInstallation,installationSummary,loadConfig} from './installation.mjs';
 import {SCENARIOS,scenarioProfile} from './scenario-profiles.mjs';
 import {scoreEvaluation} from './evaluation-score.mjs';
+import {loadSavedApiKey,saveApiKey,clearSavedApiKey} from './local-credentials.mjs';
 
 const HERE=path.dirname(fileURLToPath(import.meta.url));
 const DASH=path.join(HERE,'dashboard');
@@ -33,7 +34,7 @@ const contextDir=path.join(ROOT,'dashboard-context');
 const contextCatalogFile=path.join(contextDir,'catalog.json');
 const operatorFile=path.join(ROOT,'operator.json');
 const inheritedApiKey=String(process.env.OPENAI_API_KEY||'').trim();
-let dashboardApiKey='';
+let dashboardApiKey=loadSavedApiKey(ROOT);
 fs.mkdirSync(contextDir,{recursive:true,mode:0o700});
 
 const readJson=file=>fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):null;
@@ -85,10 +86,10 @@ function keychainApiKeyAvailable(){
  try{execFileSync('security',['find-generic-password','-a',process.env.USER||'', '-s','agentakt-openai-api-key'],{stdio:'ignore',timeout:5000});return true;}catch{return false;}
 }
 function credentialSummary(){
- if(dashboardApiKey)return {configured:true,source:'dashboard session',sessionKey:true};
- if(inheritedApiKey)return {configured:true,source:'server environment',sessionKey:false};
- if(keychainApiKeyAvailable())return {configured:true,source:'macOS Keychain',sessionKey:false};
- return {configured:false,source:null,sessionKey:false};
+ if(dashboardApiKey)return {configured:true,source:'saved key on this computer',savedKey:true};
+ if(inheritedApiKey)return {configured:true,source:'server environment',savedKey:false};
+ if(keychainApiKeyAvailable())return {configured:true,source:'macOS Keychain',savedKey:false};
+ return {configured:false,source:null,savedKey:false};
 }
 function launchXPlane(situation){
  if(!CFG.simRoot)return {launched:false,reason:'Configure the X-Plane installation folder first.'};
@@ -180,10 +181,10 @@ async function api(req,res,url){
  if(req.method==='POST'&&url.pathname==='/api/credentials'){
   requireLocalControl(req);if(evaluationBusy())throw Error('Stop the active setup or evaluation before changing provider credentials.');
   const input=await body(req);
-  if(input.clear===true){dashboardApiKey='';return send(res,200,{credentials:credentialSummary()});}
+  if(input.clear===true){clearSavedApiKey(ROOT);dashboardApiKey='';return send(res,200,{credentials:credentialSummary()});}
   const key=String(input.apiKey||'').trim();
   if(key.length<20||key.length>500||/\s/.test(key))throw Error('Enter a valid API key without spaces.');
-  dashboardApiKey=key;return send(res,200,{credentials:credentialSummary()});
+  saveApiKey(ROOT,key);dashboardApiKey=key;return send(res,200,{credentials:credentialSummary()});
  }
  if(req.method==='GET'&&url.pathname==='/api/context-file'){
   const source=listContext().find(item=>item.id===url.searchParams.get('id'));if(!source)return send(res,404,{error:'Context source not found'});
