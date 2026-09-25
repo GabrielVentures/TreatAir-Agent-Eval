@@ -5,6 +5,24 @@ import path from 'node:path';
 import vm from 'node:vm';
 import {EventEmitter} from 'node:events';
 
+test('prepare buttons preserve the selected scenario across a setup redraw',async()=>{
+ const source=fs.readFileSync(new URL('./dashboard/app.js',import.meta.url),'utf8');
+ for(const button of ['prepare-loaded','load-situation']){
+  const line=source.split('\n').find(row=>row.includes(`$('#${button}').addEventListener`));
+  let click,payload;
+  const scenario={value:'weather-challenge'},situation={value:'test.sit'};
+  const context={
+   $:selector=>selector==='#scenario'?scenario:selector==='#situation'?situation:{addEventListener:(_,fn)=>{click=fn;}},
+   showSetupStarting:()=>{scenario.value='';},
+   request:async(_,options)=>{payload=JSON.parse(options.body);return {job:{pid:123}};},
+   status:()=>{},refresh:async()=>{},showStage:()=>{}
+  };
+  vm.runInNewContext(line,context);
+  await click();
+  assert.equal(payload.scenarioId,'weather-challenge');
+ }
+});
+
 test('preparation clears prior evaluation error before starting the setup child',()=>{
  const source=fs.readFileSync(new URL('./dashboard.mjs',import.meta.url),'utf8');
  const fn=source.slice(source.indexOf('function startJob('),source.indexOf('function runConfig('));
